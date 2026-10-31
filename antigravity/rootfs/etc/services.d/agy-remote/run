@@ -21,7 +21,7 @@ fi
 instance_name="$(bashio::config 'instance_name')"
 workspace_dir="$(bashio::config 'workspace_dir')"
 mkdir -p "${workspace_dir}"
-cd "${workspace_dir}"
+cd "${workspace_dir}" || exit 1
 
 cleanup() {
     bashio::log.info "Stopping Antigravity Remote Control daemon..."
