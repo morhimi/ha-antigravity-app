@@ -1,0 +1,2 @@
+# S6-Overlay init in Home Assistant Apps requires root PID 1 privileges during boot
+DS-0002
