@@ -1,8 +1,14 @@
 # Antigravity Home Assistant App Repository
 
-[![Open your Home Assistant instance and show the add app repository dialog with a specific repository URL pre-filled.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fmorhimi%2Fha-antigravity-app)
+[![GitHub Release](https://img.shields.io/github/v/release/morhimi/ha-antigravity-app?label=version&logo=github)](https://github.com/morhimi/ha-antigravity-app/releases)
 [![Build & Publish](https://github.com/morhimi/ha-antigravity-app/actions/workflows/builder.yaml/badge.svg)](https://github.com/morhimi/ha-antigravity-app/actions/workflows/builder.yaml)
-[![Lint](https://github.com/morhimi/ha-antigravity-app/actions/workflows/lint.yaml/badge.svg)](https://github.com/morhimi/ha-antigravity-app/actions/workflows/lint.yaml)
+[![Lint, Security & Smoke Test](https://github.com/morhimi/ha-antigravity-app/actions/workflows/lint.yaml/badge.svg)](https://github.com/morhimi/ha-antigravity-app/actions/workflows/lint.yaml)
+[![Auto-Update Upstream Dependencies](https://github.com/morhimi/ha-antigravity-app/actions/workflows/auto-update.yaml/badge.svg)](https://github.com/morhimi/ha-antigravity-app/actions/workflows/auto-update.yaml)
+[![Supports amd64 Architecture](https://img.shields.io/badge/amd64-yes-green.svg)](#)
+[![Supports aarch64 Architecture](https://img.shields.io/badge/aarch64-yes-green.svg)](#)
+[![License: MIT](https://img.shields.io/github/license/morhimi/ha-antigravity-app)](./LICENSE)
+
+[![Open your Home Assistant instance and show the add app repository dialog with a specific repository URL pre-filled.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fmorhimi%2Fha-antigravity-app)
 
 This repository provides a Home Assistant App that runs the **Google Antigravity CLI (`agy`)** as an always-on, supervised background service on your Home Assistant server.
 

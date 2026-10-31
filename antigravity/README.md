@@ -1,5 +1,10 @@
 # Home Assistant App: Antigravity CLI
 
+[![GitHub Release](https://img.shields.io/github/v/release/morhimi/ha-antigravity-app?label=version&logo=github)](https://github.com/morhimi/ha-antigravity-app/releases)
+[![Supports amd64 Architecture](https://img.shields.io/badge/amd64-yes-green.svg)](#)
+[![Supports aarch64 Architecture](https://img.shields.io/badge/aarch64-yes-green.svg)](#)
+[![Lint, Security & Smoke Test](https://github.com/morhimi/ha-antigravity-app/actions/workflows/lint.yaml/badge.svg)](https://github.com/morhimi/ha-antigravity-app/actions/workflows/lint.yaml)
+
 Run the **Google Antigravity CLI (`agy`)** 24/7 on your Home Assistant server with native **Remote Control** and an integrated **Home Assistant Ingress Web Terminal**.
 
 ## Features
