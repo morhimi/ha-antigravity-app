@@ -32,7 +32,7 @@ jobs:
           path: "./antigravity"
 
       - name: Run hadolint on Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: "./antigravity/Dockerfile"
           config: "./.hadolint.yaml"
