@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0
+
+- Added `ssh_private_key` App configuration option (accepting a file path such as `/ssl/id_ed25519`, a Base64-encoded key, or a raw OpenSSH private key) with automatic public key derivation (`ssh-keygen -y`) and validation.
+- Automatically generates a persistent `/data/.ssh/id_ed25519` keypair on first boot if none exists, configures `/data/.ssh/config` (`StrictHostKeyChecking accept-new`), and prints the active SSH public key in the App startup log and Web UI welcome banner.
+
 ## 1.2.0
 
 - Added `permission_mode` App configuration option (`turbo`, `auto`, `default`, `request_review`, defaulting to `turbo`) that configures both `~/.gemini/config/config.json` (used by Remote Control / Antigravity 2.0) and `~/.gemini/antigravity-cli/settings.json` (used by interactive CLI sessions), plus pre-trusts Home Assistant workspace directories.

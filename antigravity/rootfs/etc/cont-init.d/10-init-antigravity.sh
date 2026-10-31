@@ -81,7 +81,57 @@ workspace_dir="$(bashio::config 'workspace_dir')"
 /usr/local/bin/agy-apply-mode "${permission_mode}" "${workspace_dir}"
 bashio::log.info "Configured Antigravity working/permission mode: ${permission_mode}"
 
-# 6. Configure optional GEMINI_API_KEY in s6 container environment
+# 6. Configure SSH client identity (/data/.ssh) and non-interactive defaults
+ssh_dir="/data/.ssh"
+ssh_key="${ssh_dir}/id_ed25519"
+ssh_pub="${ssh_dir}/id_ed25519.pub"
+
+if bashio::config.has_value 'ssh_private_key'; then
+    ssh_input="$(bashio::config 'ssh_private_key')"
+    tmp_key="$(mktemp)"
+    if [[ "${ssh_input}" == /* ]] && [ -f "${ssh_input}" ]; then
+        cp -f "${ssh_input}" "${tmp_key}"
+    elif [[ "${ssh_input}" == *"BEGIN "* ]]; then
+        printf '%s\n' "${ssh_input}" > "${tmp_key}"
+    else
+        printf '%s' "${ssh_input}" | tr -d ' \t\r\n' | base64 -d > "${tmp_key}" 2>/dev/null || true
+    fi
+    chmod 600 "${tmp_key}"
+    if ssh-keygen -y -f "${tmp_key}" > "${tmp_key}.pub" 2>/dev/null; then
+        mv -f "${tmp_key}" "${ssh_key}"
+        mv -f "${tmp_key}.pub" "${ssh_pub}"
+        chmod 600 "${ssh_key}"
+        chmod 644 "${ssh_pub}"
+        bashio::log.info "Installed configured SSH private key into ${ssh_key}."
+    else
+        rm -f "${tmp_key}" "${tmp_key}.pub"
+        bashio::log.warning "Configured ssh_private_key could not be parsed by ssh-keygen; keeping existing key in ${ssh_dir}."
+    fi
+elif [ ! -f "${ssh_key}" ] && [ ! -f "${ssh_dir}/id_rsa" ]; then
+    ssh-keygen -t ed25519 -N "" -C "antigravity@${instance_name:-home-assistant}" -f "${ssh_key}" >/dev/null 2>&1
+    chmod 600 "${ssh_key}"
+    chmod 644 "${ssh_pub}"
+    bashio::log.info "Generated new persistent SSH keypair in ${ssh_key}."
+elif [ -f "${ssh_key}" ] && [ ! -f "${ssh_pub}" ]; then
+    ssh-keygen -y -f "${ssh_key}" > "${ssh_pub}" 2>/dev/null || true
+    chmod 644 "${ssh_pub}" 2>/dev/null || true
+fi
+
+if [ -f "${ssh_pub}" ]; then
+    bashio::log.info "Active SSH public key: $(cat "${ssh_pub}")"
+fi
+
+if [ ! -f "${ssh_dir}/config" ]; then
+    cat << 'EOF' > "${ssh_dir}/config"
+Host *
+    StrictHostKeyChecking accept-new
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+EOF
+    chmod 600 "${ssh_dir}/config"
+fi
+
+# 7. Configure optional GEMINI_API_KEY in s6 container environment
 if bashio::config.has_value 'gemini_api_key'; then
     mkdir -p /run/s6/container_environment
     printf '%s' "$(bashio::config 'gemini_api_key')" > /run/s6/container_environment/GEMINI_API_KEY

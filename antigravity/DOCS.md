@@ -30,6 +30,7 @@ This app runs the **Google Antigravity CLI (`agy`)** inside a persistent Debian 
 | `ha_mcp_enabled` | `true` | Automatically configure `~/.gemini/config/mcp_config.json` with the `home-assistant` MCP server when `ha_mcp_token` is provided. |
 | `ha_mcp_url` | `"http://homeassistant:8123/api/mcp"` | Home Assistant native MCP server endpoint. |
 | `ha_mcp_token` | *(optional)* | Long-Lived Access Token from your Home Assistant user profile for `/api/mcp`. |
+| `ssh_private_key` | *(optional)* | SSH private key for connecting to external hosts (e.g., OpenWrt APs). Accepts a file path (`/ssl/id_ed25519`), a Base64-encoded key (`base64 < ~/.ssh/id_ed25519 \| tr -d '\n'`), or a raw OpenSSH private key. If left blank, a persistent Ed25519 keypair is generated in `/data/.ssh/id_ed25519` and its public key is printed in the App startup log and Web UI banner. |
 | `gemini_api_key` | *(optional)* | Optional `GEMINI_API_KEY` if authenticating with an API key instead of OAuth. |
 | `log_level` | `"info"` | App script log verbosity (`trace`, `debug`, `info`, `notice`, `warning`, `error`, `fatal`). |
 

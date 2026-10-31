@@ -41,6 +41,13 @@ configuration:
     description: >-
       Optional Long-Lived Access Token for authenticating Antigravity with Home
       Assistant's native /api/mcp server.
+  ssh_private_key:
+    name: SSH Private Key (Optional)
+    description: >-
+      Optional SSH private key for connecting to external hosts (e.g. OpenWrt
+      APs). Accepts a file path (e.g. /ssl/id_ed25519), a Base64-encoded key
+      (base64 < ~/.ssh/id_ed25519 | tr -d '\n'), or a raw OpenSSH private key.
+      If left blank, a persistent Ed25519 keypair is generated in /data/.ssh.
   gemini_api_key:
     name: Gemini API Key (Optional)
     description: >-

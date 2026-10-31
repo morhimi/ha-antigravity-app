@@ -21,6 +21,9 @@ print_banner() {
     printf "  Working Mode  : \033[1;35m%s\033[0m\n" "${permission_mode}"
     printf "  Workspace     : \033[1;33m%s\033[0m\n" "$(pwd)"
     printf "  Remote Portal : \033[1;34mhttps://antigravity.google.com/\033[0m (instance: \033[1m%s\033[0m)\n" "${instance_name}"
+    if [ -f /data/.ssh/id_ed25519.pub ]; then
+        printf "  SSH Public Key: \033[0;37m%s\033[0m\n" "$(cat /data/.ssh/id_ed25519.pub)"
+    fi
     printf "\033[1;36m------------------------------------------------------------------\033[0m\n"
     /usr/local/bin/agy remote-control status 2>&1 || true
     printf "\033[1;36m------------------------------------------------------------------\033[0m\n"
