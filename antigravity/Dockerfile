@@ -84,7 +84,7 @@ ENV \
 WORKDIR /homeassistant
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8099/ >/dev/null || exit 1
+    CMD ["/bin/bash", "-o", "pipefail", "-c", "curl -fsS http://127.0.0.1:8099/ >/dev/null || exit 1"]
 
 LABEL \
     org.opencontainers.image.title="Home Assistant App: Antigravity CLI" \
