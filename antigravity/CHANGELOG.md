@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.2
+
+- Replaced placeholder app icon and logo with the official Google Antigravity icon.
+- Automated GitHub Release creation in CI after multi-arch image publication.
+
 ## 1.1.1
 
 - Fixed broken/truncated Google OAuth URL in the Ingress web terminal (`ttyd`) by running first-time authentication via `agy -p` directly in `ttyd` (without `tmux` / TUI box margin line-splitting or mouse capture), keeping the entire OAuth URL clickable as a single unbroken link.
