@@ -1,7 +1,7 @@
 #!/usr/bin/with-contenv bashio
 # shellcheck shell=bash
 # ==============================================================================
-# Home Assistant Add-on: Antigravity CLI
+# Home Assistant App: Antigravity CLI
 # Supervises the persistent 'agy remote-control' background daemon
 # ==============================================================================
 
@@ -14,7 +14,7 @@ export SSH_CONNECTION="127.0.0.1 0 127.0.0.1 22"
 export PATH="/data/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 if ! bashio::config.true 'remote_control'; then
-    bashio::log.info "Remote Control daemon is disabled via add-on configuration."
+    bashio::log.info "Remote Control daemon is disabled via app configuration."
     exec s6-svc -Od .
 fi
 

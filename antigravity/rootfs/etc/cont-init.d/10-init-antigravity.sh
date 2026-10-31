@@ -1,7 +1,7 @@
 #!/usr/bin/with-contenv bashio
 # shellcheck shell=bash
 # ==============================================================================
-# Home Assistant Add-on: Antigravity CLI
+# Home Assistant App: Antigravity CLI
 # Initializes persistent storage, CLI binary, and MCP configuration
 # ==============================================================================
 

@@ -1,11 +1,11 @@
-# https://developers.home-assistant.io/docs/add-ons/configuration
+# https://contributors.home-assistant.io/apps/reference/configuration/
 name: Antigravity CLI
-version: "1.0.0"
+version: "1.1.0"
 slug: antigravity
 description: >-
   Google Antigravity autonomous AI agent CLI (agy) with persistent Remote
   Control daemon and Ingress web terminal
-url: "https://github.com/morhimi/ha-antigravity-addon/tree/main/antigravity"
+url: "https://github.com/morhimi/ha-antigravity-app/tree/main/antigravity"
 arch:
   - aarch64
   - amd64
@@ -18,8 +18,8 @@ panel_icon: mdi:robot-outline
 panel_title: Antigravity
 startup: services
 map:
-  - all_addon_configs:rw
-  - addons:rw
+  - all_app_configs:rw
+  - local_apps:rw
   - backup:rw
   - homeassistant_config:rw
   - media:rw
@@ -43,4 +43,4 @@ schema:
   ha_mcp_token: password?
   gemini_api_key: password?
   log_level: list(trace|debug|info|notice|warning|error|fatal)
-image: "ghcr.io/morhimi/ha-antigravity"
+image: "ghcr.io/morhimi/app-antigravity"

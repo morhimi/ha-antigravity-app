@@ -13,7 +13,7 @@ configuration:
     name: Auto-Update Antigravity CLI on Start
     description: >-
       Automatically check for and install the latest upstream 'agy' CLI release
-      into persistent storage when the add-on starts.
+      into persistent storage when the app starts.
   workspace_dir:
     name: Default Workspace Directory
     description: >-
@@ -42,4 +42,4 @@ configuration:
   log_level:
     name: Log Level
     description: >-
-      Controls the verbosity of the add-on supervisor scripts.
+      Controls the verbosity of the app supervisor scripts.

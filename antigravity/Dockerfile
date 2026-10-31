@@ -1,5 +1,5 @@
-# https://developers.home-assistant.io/docs/add-ons/configuration#add-on-dockerfile
-ARG BUILD_FROM=ghcr.io/home-assistant/base-debian:bookworm
+# https://contributors.home-assistant.io/apps/guides/dockerfile/
+ARG BUILD_FROM=ghcr.io/home-assistant/base-debian:trixie
 FROM ${BUILD_FROM}
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -86,7 +86,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8099/ >/dev/null || exit 1
 
 LABEL \
-    org.opencontainers.image.title="Home Assistant Add-on: Antigravity CLI" \
+    org.opencontainers.image.title="Home Assistant App: Antigravity CLI" \
     org.opencontainers.image.description="Google Antigravity autonomous AI agent CLI (agy) with persistent Remote Control daemon and Ingress web terminal" \
-    org.opencontainers.image.source="https://github.com/morhimi/ha-antigravity-addon" \
+    org.opencontainers.image.source="https://github.com/morhimi/ha-antigravity-app" \
     org.opencontainers.image.licenses="MIT"

@@ -1,12 +1,12 @@
-# Home Assistant Add-on: Antigravity CLI Documentation
+# Home Assistant App: Antigravity CLI Documentation
 
-This add-on runs the **Google Antigravity CLI (`agy`)** inside a persistent Debian (`glibc`) environment supervised by Home Assistant.
+This app runs the **Google Antigravity CLI (`agy`)** inside a persistent Debian 13 (`trixie` / `glibc`) environment supervised by Home Assistant.
 
 ---
 
 ## First-Time Setup & Authentication
 
-1. Install and **Start** the **Antigravity CLI** add-on.
+1. Install and **Start** the **Antigravity CLI** app.
 2. Click **Open Web UI** (or select **Antigravity** from your Home Assistant sidebar).
 3. On first launch, the Ingress web terminal automatically opens a `tmux` session and starts `agy` in remote sign-in mode:
    - Click or copy the displayed Google authentication URL.
@@ -24,19 +24,19 @@ This add-on runs the **Google Antigravity CLI (`agy`)** inside a persistent Debi
 | :--- | :--- | :--- |
 | `instance_name` | `"home-assistant"` | Machine name displayed in Antigravity Remote Control. |
 | `remote_control` | `true` | Keep the `agy remote-control` daemon running in the background. |
-| `auto_update_cli` | `true` | Automatically update the `/data/bin/agy` binary to the latest upstream release on add-on startup. |
+| `auto_update_cli` | `true` | Automatically update the `/data/bin/agy` binary to the latest upstream release on app startup. |
 | `workspace_dir` | `"/homeassistant"` | Default working directory (`/homeassistant` is also symlinked at `/config`). |
 | `ha_mcp_enabled` | `true` | Automatically configure `~/.gemini/config/mcp_config.json` with the `home-assistant` MCP server when `ha_mcp_token` is provided. |
 | `ha_mcp_url` | `"http://homeassistant:8123/api/mcp"` | Home Assistant native MCP server endpoint. |
 | `ha_mcp_token` | *(optional)* | Long-Lived Access Token from your Home Assistant user profile for `/api/mcp`. |
 | `gemini_api_key` | *(optional)* | Optional `GEMINI_API_KEY` if authenticating with an API key instead of OAuth. |
-| `log_level` | `"info"` | Add-on script log verbosity (`trace`, `debug`, `info`, `notice`, `warning`, `error`, `fatal`). |
+| `log_level` | `"info"` | App script log verbosity (`trace`, `debug`, `info`, `notice`, `warning`, `error`, `fatal`). |
 
 ---
 
 ## Persistence & Mapped Directories
 
-All stateful data lives on `/data` and survives add-on restarts, container upgrades, and Home Assistant OS updates:
+All stateful data lives on `/data` and survives app restarts, container upgrades, and Home Assistant OS updates:
 
 - `/data/bin/agy` (symlinked at `/usr/local/bin/agy`): Allows `agy` to self-update in-place without losing updates on container restart.
 - `/data/.gemini` (symlinked at `/root/.gemini`): Stores OAuth tokens, `settings.json`, `mcp_config.json`, skills, rules, plugins, and conversation transcripts.

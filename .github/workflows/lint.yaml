@@ -18,13 +18,13 @@ permissions:
 
 jobs:
   lint:
-    name: Lint Add-on
+    name: Lint App
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
 
-      - name: Run Home Assistant Add-on Linter
+      - name: Run Home Assistant App Linter
         uses: frenck/action-addon-linter@v2.21.1
         with:
           path: "./antigravity"
