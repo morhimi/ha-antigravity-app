@@ -8,13 +8,13 @@ This app runs the **Google Antigravity CLI (`agy`)** inside a persistent Debian 
 
 1. Install and **Start** the **Antigravity CLI** app.
 2. Click **Open Web UI** (or select **Antigravity** from your Home Assistant sidebar).
-3. On first launch, the Ingress web terminal automatically opens a `tmux` session and starts `agy` in remote sign-in mode:
-   - Click or copy the displayed Google authentication URL.
+3. On first launch, the Ingress web terminal prompts for one-time Google Account authentication:
+   - Click the displayed Google authentication URL.
    - Sign in with your Google Account and paste the authorization code back into the terminal.
 4. Once authenticated:
    - Your credentials are saved permanently in `/data/.gemini`.
-   - Within ~15 seconds, the background `agy-remote` service automatically launches the `agy remote-control` daemon under your configured **Instance Name** (default: `home-assistant`).
-   - Open [https://antigravity.google](https://antigravity.google) from any browser or mobile device to connect to your `home-assistant` instance remotely.
+   - The background `agy-remote` service automatically launches the `agy remote-control` daemon under your configured **Instance Name** (default: `home-assistant`).
+   - Open [https://antigravity.google.com/](https://antigravity.google.com/) from any browser or mobile device to connect to your `home-assistant` instance remotely.
 
 ---
 

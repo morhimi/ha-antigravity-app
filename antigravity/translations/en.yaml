@@ -3,7 +3,7 @@ configuration:
     name: Remote Control Instance Name
     description: >-
       Label displayed for this Home Assistant server in Google Antigravity
-      Remote Control (https://antigravity.google).
+      Remote Control (https://antigravity.google.com/).
   permission_mode:
     name: Default Working / Permission Mode
     description: >-

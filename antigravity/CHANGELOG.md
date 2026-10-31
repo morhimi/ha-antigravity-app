@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+
+- Updated Remote Control portal links in documentation and UI translations to `https://antigravity.google.com/`.
+- Added `.github/dependabot.yml` for automated weekly GitHub Actions and Docker dependency checks.
+
 ## 1.3.0
 
 - Added `ssh_private_key` App configuration option (accepting a file path such as `/ssl/id_ed25519`, a Base64-encoded key, or a raw OpenSSH private key) with automatic public key derivation (`ssh-keygen -y`) and validation.
