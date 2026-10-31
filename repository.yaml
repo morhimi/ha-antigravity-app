@@ -1,0 +1,4 @@
+# https://developers.home-assistant.io/docs/add-ons/repository
+name: Antigravity Home Assistant Add-ons
+url: "https://github.com/morhimi/ha-antigravity-addon"
+maintainer: Mor Himi <mor.himi@gmail.com>

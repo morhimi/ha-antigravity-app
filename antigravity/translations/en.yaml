@@ -1,0 +1,45 @@
+configuration:
+  instance_name:
+    name: Remote Control Instance Name
+    description: >-
+      Label displayed for this Home Assistant server in Google Antigravity
+      Remote Control (https://antigravity.google).
+  remote_control:
+    name: Enable Remote Control Daemon
+    description: >-
+      Run the persistent 'agy remote-control' background daemon so you can
+      control sessions remotely from any browser or mobile device.
+  auto_update_cli:
+    name: Auto-Update Antigravity CLI on Start
+    description: >-
+      Automatically check for and install the latest upstream 'agy' CLI release
+      into persistent storage when the add-on starts.
+  workspace_dir:
+    name: Default Workspace Directory
+    description: >-
+      Default working directory for 'agy' sessions (defaults to /homeassistant,
+      your Home Assistant configuration folder).
+  ha_mcp_enabled:
+    name: Configure Home Assistant MCP Server
+    description: >-
+      Automatically register your Home Assistant native MCP endpoint (/api/mcp)
+      in ~/.gemini/config/mcp_config.json when a Long-Lived Access Token is set.
+  ha_mcp_url:
+    name: Home Assistant MCP Endpoint URL
+    description: >-
+      Streamable HTTP URL for Home Assistant's native MCP server
+      (default: http://homeassistant:8123/api/mcp).
+  ha_mcp_token:
+    name: Home Assistant Long-Lived Access Token
+    description: >-
+      Optional Long-Lived Access Token for authenticating Antigravity with Home
+      Assistant's native /api/mcp server.
+  gemini_api_key:
+    name: Gemini API Key (Optional)
+    description: >-
+      Optional GEMINI_API_KEY environment variable if using API-key
+      authentication instead of interactive Google Account OAuth.
+  log_level:
+    name: Log Level
+    description: >-
+      Controls the verbosity of the add-on supervisor scripts.

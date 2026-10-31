@@ -1,0 +1,8 @@
+#!/usr/bin/env bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Restart agy-remote supervision loop if it exits
+# ==============================================================================
+
+bashio::log.info "agy-remote service stopped; restarting in 5 seconds..."
+sleep 5

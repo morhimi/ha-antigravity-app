@@ -1,0 +1,68 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Home Assistant Add-on: Antigravity CLI
+# Supervises the persistent 'agy remote-control' background daemon
+# ==============================================================================
+
+set -uo pipefail
+
+export HOME="/root"
+export SHELL="/bin/bash"
+export TERM="xterm-256color"
+export SSH_CONNECTION="127.0.0.1 0 127.0.0.1 22"
+export PATH="/data/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+if ! bashio::config.true 'remote_control'; then
+    bashio::log.info "Remote Control daemon is disabled via add-on configuration."
+    exec s6-svc -Od .
+fi
+
+instance_name="$(bashio::config 'instance_name')"
+workspace_dir="$(bashio::config 'workspace_dir')"
+mkdir -p "${workspace_dir}"
+cd "${workspace_dir}"
+
+cleanup() {
+    bashio::log.info "Stopping Antigravity Remote Control daemon..."
+    /usr/local/bin/agy remote-control stop >/dev/null 2>&1 || true
+    exit 0
+}
+trap cleanup SIGTERM SIGINT
+
+notified_unsigned=false
+
+while true; do
+    status_out="$(/usr/local/bin/agy remote-control status 2>&1 || true)"
+    if echo "${status_out}" | grep -qE "Daemon state = (running|active)"; then
+        sleep 15 &
+        wait $!
+        continue
+    fi
+
+    start_out="$(/usr/local/bin/agy remote-control start --name "${instance_name}" 2>&1 || true)"
+    if echo "${start_out}" | grep -qi "not signed in"; then
+        if [ "${notified_unsigned}" = false ]; then
+            bashio::log.notice "=================================================================="
+            bashio::log.notice "Antigravity CLI is not signed in yet."
+            bashio::log.notice "Open the Antigravity Web UI (Ingress) in Home Assistant to complete"
+            bashio::log.notice "one-time Google Account authentication."
+            bashio::log.notice "The Remote Control daemon will start automatically once signed in."
+            bashio::log.notice "=================================================================="
+            notified_unsigned=true
+        fi
+        sleep 10 &
+        wait $!
+        continue
+    fi
+
+    if echo "${start_out}" | grep -qi "started"; then
+        notified_unsigned=false
+        bashio::log.info "${start_out}"
+    else
+        bashio::log.warning "Remote Control daemon start output: ${start_out}"
+    fi
+
+    sleep 15 &
+    wait $!
+done

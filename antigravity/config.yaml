@@ -1,0 +1,46 @@
+# https://developers.home-assistant.io/docs/add-ons/configuration
+name: Antigravity CLI
+version: "1.0.0"
+slug: antigravity
+description: >-
+  Google Antigravity autonomous AI agent CLI (agy) with persistent Remote
+  Control daemon and Ingress web terminal
+url: "https://github.com/morhimi/ha-antigravity-addon/tree/main/antigravity"
+arch:
+  - aarch64
+  - amd64
+hassio_api: true
+hassio_role: manager
+homeassistant_api: true
+ingress: true
+init: false
+panel_icon: mdi:robot-outline
+panel_title: Antigravity
+startup: services
+map:
+  - all_addon_configs:rw
+  - addons:rw
+  - backup:rw
+  - homeassistant_config:rw
+  - media:rw
+  - share:rw
+  - ssl:ro
+options:
+  instance_name: "home-assistant"
+  remote_control: true
+  auto_update_cli: true
+  workspace_dir: "/homeassistant"
+  ha_mcp_enabled: true
+  ha_mcp_url: "http://homeassistant:8123/api/mcp"
+  log_level: "info"
+schema:
+  instance_name: str
+  remote_control: bool
+  auto_update_cli: bool
+  workspace_dir: str
+  ha_mcp_enabled: bool
+  ha_mcp_url: str
+  ha_mcp_token: password?
+  gemini_api_key: password?
+  log_level: list(trace|debug|info|notice|warning|error|fatal)
+image: "ghcr.io/morhimi/ha-antigravity"
