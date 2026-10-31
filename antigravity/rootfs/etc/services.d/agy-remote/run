@@ -49,7 +49,7 @@ while true; do
     fi
 
     status_out="$(/usr/local/bin/agy remote-control status 2>&1 || true)"
-    if echo "${status_out}" | grep -qE "Daemon state = (running|active)"; then
+    if echo "${status_out}" | grep -qiE "Daemon (status|state)[ :=]+(running|active)"; then
         sleep 15 &
         wait $!
         continue

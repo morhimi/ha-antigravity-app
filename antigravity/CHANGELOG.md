@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.4
+
+- Fixed `agy-remote` healthcheck regex (`Daemon status: active` vs `Daemon state = active`) that caused the supervisor loop to restart the Remote Control daemon every 18 seconds and disconnect active remote sessions.
+- Set `ttyd --debug 1` so the 30-second local Docker `HEALTHCHECK` (`HTTP / - 127.0.0.1`) no longer spams `libwebsockets` connection logs.
+- Prevented `s6-svwait: fatal: timed out` on container shutdown by exiting immediately in `agy-remote/finish` when stopped cleanly.
+
 ## 1.1.3
 
 - Added post-login confirmation banner in the Web UI displaying the clickable `https://antigravity.google.com/` Remote Control portal URL and instance name, and eliminated the duplicate first-time sign-in prompt loop.
