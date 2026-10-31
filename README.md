@@ -19,7 +19,7 @@ This repository provides a Home Assistant App that runs the **Google Antigravity
 Run **Google Antigravity (`agy`)** 24/7 on your Home Assistant server without keeping your laptop open:
 
 - **Native Remote Control Daemon (`agy remote-control`)**: Supervised by `s6-overlay` so you can start, monitor, and control agent sessions from any browser at [antigravity.google.com](https://antigravity.google.com/) or the mobile app (iOS / Android).
-- **Home Assistant Ingress Web Terminal (`ttyd` + `tmux`)**: One-click interactive terminal inside the Home Assistant sidebar (`Antigravity`) for initial Google Account sign-in and direct interactive CLI sessions.
+- **Home Assistant Ingress Web Terminal (`ttyd`)**: One-click interactive terminal inside the Home Assistant sidebar (`Antigravity`) for initial Google Account sign-in and direct interactive CLI sessions.
 - **Full Persistence Across Updates & Reboots**: Credentials, conversation transcripts, skills, rules, plugins, SSH keys, and CLI self-updates are stored inside the app's persistent `/data` volume.
 - **Built-in Home Assistant Tooling**: Pre-installed on Debian 13 (`trixie`) with the official `ha` CLI, `git`, `python3`, `ripgrep`, `jq`, `ssh`, and automatic configuration for Home Assistant's native Model Context Protocol (`/api/mcp`) endpoint.
 - **Multi-Arch Pre-Built Images**: Automatically built and signed via GitHub Actions (`amd64` and `aarch64`) on `ghcr.io/morhimi/app-antigravity`.

@@ -119,8 +119,8 @@ if jq \
          "/media",
          "/backup",
          "/ssl",
-         "/addon_configs",
-         "/addons"
+         "/app_configs",
+         "/local_apps"
        ]) | unique)' "${settings_file}" > "${tmp_settings}"; then
     mv "${tmp_settings}" "${settings_file}"
     chmod 600 "${settings_file}"

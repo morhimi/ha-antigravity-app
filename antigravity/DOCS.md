@@ -44,4 +44,4 @@ All stateful data lives on `/data` and survives app restarts, container upgrades
 - `/data/.gemini` (symlinked at `/root/.gemini`): Stores OAuth tokens, `settings.json`, `mcp_config.json`, skills, rules, plugins, and conversation transcripts.
 - `/data/.ssh` (symlinked at `/root/.ssh`): Stores SSH keys and `known_hosts` for managing external hosts/routers.
 - `/homeassistant` (also symlinked at `/config`): Your Home Assistant configuration directory (`rw`).
-- `/share`, `/media`, `/backup`, `/addons`, `/addon_configs`: Mounted for full system administration.
+- `/share`, `/media`, `/backup`, `/local_apps`, `/app_configs`: Mounted for full system administration.
