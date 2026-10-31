@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.2
+
+- Updated `trustedWorkspaces` in `agy-apply-mode` and documentation to match Home Assistant Apps mount paths (`/app_configs` and `/local_apps`).
+- Added live release, architecture, and scanner status badges to `README.md`.
+
 ## 1.3.1
 
 - Updated Remote Control portal links in documentation and UI translations to `https://antigravity.google.com/`.
