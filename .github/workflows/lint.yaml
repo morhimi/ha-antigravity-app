@@ -87,14 +87,16 @@ jobs:
             ./antigravity
 
       - name: Run Trivy container and config security scan
-        uses: aquasecurity/trivy-action@0.30.0
-        with:
-          image-ref: "antigravity:smoke-test"
-          format: "table"
-          exit-code: "0"
-          ignore-unfixed: true
-          vuln-type: "os,library"
-          severity: "CRITICAL,HIGH"
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sudo sh -s -- -b /usr/local/bin v0.76.1
+          trivy config --severity CRITICAL,HIGH --exit-code 0 ./antigravity
+          trivy image \
+            --ignore-unfixed \
+            --scanners vuln \
+            --severity CRITICAL,HIGH \
+            --exit-code 0 \
+            antigravity:smoke-test
 
       - name: Boot container and run end-to-end health checks
         run: |
