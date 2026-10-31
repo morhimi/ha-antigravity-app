@@ -42,7 +42,7 @@ jobs:
           latest_ha="$(gh api repos/home-assistant/cli/releases/latest --jq .tag_name)"
           latest_digest="$(
             docker buildx imagetools inspect ghcr.io/home-assistant/base-debian:trixie \
-              | awk '/^Digest:/ {print $2; exit}'
+              | awk '/^Digest:/ && !found {print $2; found=1}'
           )"
 
           updates=()
