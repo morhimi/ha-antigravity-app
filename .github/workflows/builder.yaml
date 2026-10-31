@@ -76,7 +76,7 @@ jobs:
     needs: init
     if: needs.init.outputs.changed == 'true'
     permissions:
-      contents: read
+      contents: write
       id-token: write
       packages: write
     strategy:
