@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.3
+
+- Added post-login confirmation banner in the Web UI displaying the clickable `https://antigravity.google.com/` Remote Control portal URL and instance name, and eliminated the duplicate first-time sign-in prompt loop.
+- Added periodic 24-hour background `agy update` check in `agy-remote` (when `auto_update_cli: true`) so long-running containers automatically update `agy` and reload the daemon when new upstream versions are released.
+
 ## 1.1.2
 
 - Replaced placeholder app icon and logo with the official Google Antigravity icon.

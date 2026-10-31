@@ -19,6 +19,7 @@ if ! bashio::config.true 'remote_control'; then
 fi
 
 instance_name="$(bashio::config 'instance_name')"
+auto_update_cli="$(bashio::config 'auto_update_cli')"
 workspace_dir="$(bashio::config 'workspace_dir')"
 mkdir -p "${workspace_dir}"
 cd "${workspace_dir}" || exit 1
@@ -31,8 +32,22 @@ cleanup() {
 trap cleanup SIGTERM SIGINT
 
 notified_unsigned=false
+last_update_check="$(date +%s)"
 
 while true; do
+    # Periodic 24-hour CLI self-update check for long-running containers
+    now="$(date +%s)"
+    if [ "${auto_update_cli}" = "true" ] && [ $((now - last_update_check)) -ge 86400 ]; then
+        last_update_check="${now}"
+        before_ver="$(/usr/local/bin/agy --version 2>/dev/null || echo '')"
+        /usr/local/bin/agy update >/dev/null 2>&1 || true
+        after_ver="$(/usr/local/bin/agy --version 2>/dev/null || echo '')"
+        if [ -n "${after_ver}" ] && [ "${before_ver}" != "${after_ver}" ]; then
+            bashio::log.info "Antigravity CLI updated (${before_ver} -> ${after_ver}); restarting Remote Control daemon..."
+            /usr/local/bin/agy remote-control stop >/dev/null 2>&1 || true
+        fi
+    fi
+
     status_out="$(/usr/local/bin/agy remote-control status 2>&1 || true)"
     if echo "${status_out}" | grep -qE "Daemon state = (running|active)"; then
         sleep 15 &
