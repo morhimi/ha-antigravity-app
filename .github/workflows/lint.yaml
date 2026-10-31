@@ -63,12 +63,9 @@ jobs:
           ./actionlint -color
 
       - name: Run gitleaks secret scanner
-        run: |
-          gitleaks_ver="8.24.0"
-          curl -fsSL -o /tmp/gitleaks.tar.gz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${gitleaks_ver}/gitleaks_${gitleaks_ver}_linux_x64.tar.gz"
-          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-          /tmp/gitleaks git --verbose --redact .
+        uses: gitleaks/gitleaks-action@v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   smoke-test:
     name: Smoke Test & Security Scan
@@ -86,17 +83,25 @@ jobs:
             --load \
             ./antigravity
 
-      - name: Run Trivy container and config security scan
-        run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sudo sh -s -- -b /usr/local/bin v0.76.1
-          trivy config --severity CRITICAL,HIGH --exit-code 0 ./antigravity
-          trivy image \
-            --ignore-unfixed \
-            --scanners vuln \
-            --severity CRITICAL,HIGH \
-            --exit-code 0 \
-            antigravity:smoke-test
+      - name: Run Trivy config security scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "config"
+          scan-ref: "./antigravity"
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
+
+      - name: Run Trivy container image vulnerability scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "image"
+          image-ref: "antigravity:smoke-test"
+          format: "table"
+          exit-code: "0"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
 
       - name: Boot container and run end-to-end health checks
         run: |
