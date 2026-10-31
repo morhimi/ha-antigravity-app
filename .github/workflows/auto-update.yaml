@@ -1,0 +1,110 @@
+name: Auto-Update Upstream Dependencies
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: auto-update-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+
+jobs:
+  check-updates:
+    name: Check upstream dependencies
+    runs-on: ubuntu-latest
+    outputs:
+      updated: ${{ steps.check.outputs.updated }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Check for upstream updates
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          dockerfile="antigravity/Dockerfile"
+          config_file="antigravity/config.yaml"
+          changelog_file="antigravity/CHANGELOG.md"
+
+          cur_ttyd="$(sed -n 's/^ARG TTYD_VERSION=//p' "${dockerfile}")"
+          cur_ha="$(sed -n 's/^ARG HA_CLI_VERSION=//p' "${dockerfile}")"
+          cur_digest="$(sed -n 's/^# BASE_IMAGE_DIGEST=//p' "${dockerfile}")"
+
+          latest_ttyd="$(gh api repos/tsl0922/ttyd/releases/latest --jq .tag_name)"
+          latest_ha="$(gh api repos/home-assistant/cli/releases/latest --jq .tag_name)"
+          latest_digest="$(
+            docker buildx imagetools inspect ghcr.io/home-assistant/base-debian:trixie \
+              | awk '/^Digest:/ {print $2; exit}'
+          )"
+
+          updates=()
+          if [[ -n "${latest_ttyd}" && "${latest_ttyd}" != "${cur_ttyd}" ]]; then
+            sed -i "s/^ARG TTYD_VERSION=.*/ARG TTYD_VERSION=${latest_ttyd}/" "${dockerfile}"
+            updates+=("- Updated \`ttyd\` from \`${cur_ttyd}\` to \`${latest_ttyd}\`.")
+          fi
+
+          if [[ -n "${latest_ha}" && "${latest_ha}" != "${cur_ha}" ]]; then
+            sed -i "s/^ARG HA_CLI_VERSION=.*/ARG HA_CLI_VERSION=${latest_ha}/" "${dockerfile}"
+            updates+=("- Updated Home Assistant CLI (\`ha\`) from \`${cur_ha}\` to \`${latest_ha}\`.")
+          fi
+
+          if [[ -n "${latest_digest}" && "${latest_digest}" != "${cur_digest}" ]]; then
+            sed -i "s|^# BASE_IMAGE_DIGEST=.*|# BASE_IMAGE_DIGEST=${latest_digest}|" "${dockerfile}"
+            updates+=("- Updated \`ghcr.io/home-assistant/base-debian:trixie\` base image (\`${latest_digest:0:19}\`).")
+          fi
+
+          if [[ ${#updates[@]} -eq 0 ]]; then
+            echo "All upstream dependencies (base-debian:trixie, ttyd, ha CLI) are up to date."
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          cur_ver="$(sed -n 's/^version: "\(.*\)"/\1/p' "${config_file}")"
+          IFS='.' read -r major minor patch <<< "${cur_ver}"
+          new_ver="${major}.${minor}.$((patch + 1))"
+
+          sed -i "s/^version: \".*\"/version: \"${new_ver}\"/" "${config_file}"
+
+          tmp_cl="$(mktemp)"
+          {
+            echo "# Changelog"
+            echo ""
+            echo "## ${new_ver}"
+            echo ""
+            for line in "${updates[@]}"; do
+              echo "${line}"
+            done
+            echo ""
+            tail -n +3 "${changelog_file}"
+          } > "${tmp_cl}"
+          mv "${tmp_cl}" "${changelog_file}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${dockerfile}" "${config_file}" "${changelog_file}"
+          git commit -m "chore(deps): auto-update upstream dependencies (v${new_ver})"
+          git push origin main
+
+          echo "updated=true" >> "$GITHUB_OUTPUT"
+
+  build-updated-app:
+    name: Build and Release Updated App
+    needs: check-updates
+    if: needs.check-updates.outputs.updated == 'true'
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+    uses: ./.github/workflows/build-app.yaml
+    with:
+      app: antigravity
+      publish: true
+    secrets: inherit

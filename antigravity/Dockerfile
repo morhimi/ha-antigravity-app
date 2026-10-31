@@ -1,4 +1,5 @@
 # https://contributors.home-assistant.io/apps/guides/dockerfile/
+# BASE_IMAGE_DIGEST=sha256:a9fb29d0ffab1a81d6379e6252db21e0edbd1263c94d9de2cfc54a396aad8611
 ARG BUILD_FROM=ghcr.io/home-assistant/base-debian:trixie
 FROM ${BUILD_FROM}
 
