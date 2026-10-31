@@ -69,12 +69,17 @@ fi
 
 ln -sfn /data/bin/agy /usr/local/bin/agy
 
-# 5. Configure Remote Control instance name
+# 5. Configure Remote Control instance name and default working/permission mode
 instance_name="$(bashio::config 'instance_name')"
 if [ -n "${instance_name}" ]; then
     printf '%s' "${instance_name}" > /data/.gemini/antigravity-cli/remote-control-name
     bashio::log.info "Configured Remote Control instance name: ${instance_name}"
 fi
+
+permission_mode="$(bashio::config 'permission_mode')"
+workspace_dir="$(bashio::config 'workspace_dir')"
+/usr/local/bin/agy-apply-mode "${permission_mode}" "${workspace_dir}"
+bashio::log.info "Configured Antigravity working/permission mode: ${permission_mode}"
 
 # 6. Configure optional GEMINI_API_KEY in s6 container environment
 if bashio::config.has_value 'gemini_api_key'; then

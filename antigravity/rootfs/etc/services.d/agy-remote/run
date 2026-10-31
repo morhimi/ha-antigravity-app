@@ -55,6 +55,7 @@ while true; do
         continue
     fi
 
+    /usr/local/bin/agy-apply-mode >/dev/null 2>&1 || true
     start_out="$(/usr/local/bin/agy remote-control start --name "${instance_name}" 2>&1 || true)"
     if echo "${start_out}" | grep -qi "not signed in"; then
         if [ "${notified_unsigned}" = false ]; then

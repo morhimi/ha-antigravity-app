@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+# ==============================================================================
+# Applies the configured permission_mode (turbo|auto|default|request_review)
+# to both ~/.gemini/config/config.json and ~/.gemini/antigravity-cli/settings.json
+# ==============================================================================
+
+set -euo pipefail
+
+mode="${1:-}"
+if [ -z "${mode}" ]; then
+    mode="$(cat /data/.gemini/antigravity-cli/permission-mode 2>/dev/null || echo 'turbo')"
+fi
+
+workspace_dir="${2:-}"
+if [ -z "${workspace_dir}" ]; then
+    workspace_dir="$(cat /data/.gemini/antigravity-cli/workspace-dir 2>/dev/null || echo '/homeassistant')"
+fi
+
+instance_name="$(cat /data/.gemini/antigravity-cli/remote-control-name 2>/dev/null || echo 'home-assistant')"
+
+mkdir -p /data/.gemini/config /data/.gemini/antigravity-cli
+printf '%s' "${mode}" > /data/.gemini/antigravity-cli/permission-mode
+printf '%s' "${workspace_dir}" > /data/.gemini/antigravity-cli/workspace-dir
+
+case "${mode}" in
+    turbo)
+        cfg_preset="AGENT_PERMISSION_PRESET_TURBO"
+        cfg_exec="CASCADE_COMMANDS_AUTO_EXECUTION_EAGER"
+        cfg_review="ARTIFACT_REVIEW_MODE_TURBO"
+        cfg_browser="BROWSER_JS_EXECUTION_POLICY_TURBO"
+        cfg_nonws="AGENT_SETTING_POLICY_ALLOW"
+        cfg_sandbox=false
+        cli_mode="auto"
+        cli_preset="Turbo"
+        ;;
+    auto)
+        cfg_preset="AGENT_PERMISSION_PRESET_AUTO"
+        cfg_exec="CASCADE_COMMANDS_AUTO_EXECUTION_AUTO"
+        cfg_review="ARTIFACT_REVIEW_MODE_AUTO"
+        cfg_browser="BROWSER_JS_EXECUTION_POLICY_MODEL_DECIDES"
+        cfg_nonws="AGENT_SETTING_POLICY_ASK"
+        cfg_sandbox=true
+        cli_mode="auto"
+        cli_preset="Auto"
+        ;;
+    request_review)
+        cfg_preset="AGENT_PERMISSION_PRESET_REQUEST_REVIEW"
+        cfg_exec="CASCADE_COMMANDS_AUTO_EXECUTION_OFF"
+        cfg_review="ARTIFACT_REVIEW_MODE_ALWAYS"
+        cfg_browser="BROWSER_JS_EXECUTION_POLICY_ALWAYS_ASK"
+        cfg_nonws="AGENT_SETTING_POLICY_ASK"
+        cfg_sandbox=false
+        cli_mode="default"
+        cli_preset="Request Review"
+        ;;
+    default|*)
+        cfg_preset="AGENT_PERMISSION_PRESET_DEFAULT"
+        cfg_exec="CASCADE_COMMANDS_AUTO_EXECUTION_PROCEED_IN_SANDBOX"
+        cfg_review="ARTIFACT_REVIEW_MODE_AUTO"
+        cfg_browser="BROWSER_JS_EXECUTION_POLICY_MODEL_DECIDES"
+        cfg_nonws="AGENT_SETTING_POLICY_ASK"
+        cfg_sandbox=true
+        cli_mode="default"
+        cli_preset="Default"
+        ;;
+esac
+
+# 1. Update /data/.gemini/config/config.json (used by Remote Control daemon & Antigravity 2.0)
+config_file="/data/.gemini/config/config.json"
+if [ ! -f "${config_file}" ]; then
+    echo '{"userSettings":{}}' > "${config_file}"
+fi
+
+tmp_cfg="$(mktemp)"
+if jq \
+    --arg hostname "${instance_name}" \
+    --arg preset "${cfg_preset}" \
+    --arg exec_pol "${cfg_exec}" \
+    --arg review "${cfg_review}" \
+    --arg browser "${cfg_browser}" \
+    --arg nonws "${cfg_nonws}" \
+    --argjson sandbox "${cfg_sandbox}" \
+    '.userSettings = ((.userSettings // {}) + {
+        "cliRemoteControlHostname": $hostname,
+        "permissionPreset": $preset,
+        "autoExecutionPolicy": $exec_pol,
+        "artifactReviewMode": $review,
+        "browserJsExecutionPolicy": $browser,
+        "nonWorkspaceFileAccessPolicy": $nonws,
+        "enableTerminalSandbox": $sandbox,
+        "permissionGrantsV2Migrated": true,
+        "sandboxEnabledAtV2Migration": $sandbox
+    })' "${config_file}" > "${tmp_cfg}"; then
+    mv "${tmp_cfg}" "${config_file}"
+    chmod 600 "${config_file}"
+else
+    rm -f "${tmp_cfg}"
+fi
+
+# 2. Update /data/.gemini/antigravity-cli/settings.json (used by interactive CLI)
+settings_file="/data/.gemini/antigravity-cli/settings.json"
+if [ ! -f "${settings_file}" ]; then
+    echo '{}' > "${settings_file}"
+fi
+
+tmp_settings="$(mktemp)"
+if jq \
+    --arg agent_mode "${cli_mode}" \
+    --arg preset "${cli_preset}" \
+    --arg ws "${workspace_dir}" \
+    '.agentMode = $agent_mode
+     | .permissionPreset = $preset
+     | .trustedWorkspaces = (((.trustedWorkspaces // []) + [
+         $ws,
+         "/homeassistant",
+         "/config",
+         "/share",
+         "/media",
+         "/backup",
+         "/ssl",
+         "/addon_configs",
+         "/addons"
+       ]) | unique)' "${settings_file}" > "${tmp_settings}"; then
+    mv "${tmp_settings}" "${settings_file}"
+    chmod 600 "${settings_file}"
+else
+    rm -f "${tmp_settings}"
+fi

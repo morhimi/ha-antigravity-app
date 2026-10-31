@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0
+
+- Added `permission_mode` App configuration option (`turbo`, `auto`, `default`, `request_review`, defaulting to `turbo`) that configures both `~/.gemini/config/config.json` (used by Remote Control / Antigravity 2.0) and `~/.gemini/antigravity-cli/settings.json` (used by interactive CLI sessions), plus pre-trusts Home Assistant workspace directories.
+
 ## 1.1.4
 
 - Fixed `agy-remote` healthcheck regex (`Daemon status: active` vs `Daemon state = active`) that caused the supervisor loop to restart the Remote Control daemon every 18 seconds and disconnect active remote sessions.

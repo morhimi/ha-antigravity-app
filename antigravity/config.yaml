@@ -1,6 +1,6 @@
 # https://contributors.home-assistant.io/apps/reference/configuration/
 name: Antigravity CLI
-version: "1.1.4"
+version: "1.2.0"
 slug: antigravity
 description: >-
   Google Antigravity autonomous AI agent CLI (agy) with persistent Remote
@@ -27,6 +27,7 @@ map:
   - ssl:ro
 options:
   instance_name: "home-assistant"
+  permission_mode: "turbo"
   remote_control: true
   auto_update_cli: true
   workspace_dir: "/homeassistant"
@@ -35,6 +36,7 @@ options:
   log_level: "info"
 schema:
   instance_name: str
+  permission_mode: list(turbo|auto|default|request_review)
   remote_control: bool
   auto_update_cli: bool
   workspace_dir: str

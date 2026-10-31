@@ -23,6 +23,7 @@ This app runs the **Google Antigravity CLI (`agy`)** inside a persistent Debian 
 | Option | Default | Description |
 | :--- | :--- | :--- |
 | `instance_name` | `"home-assistant"` | Machine name displayed in Antigravity Remote Control. |
+| `permission_mode` | `"turbo"` | Default working/permission mode (`turbo`, `auto`, `default`, `request_review`) applied to both Remote Control (`config.json`) and interactive CLI (`settings.json`). |
 | `remote_control` | `true` | Keep the `agy remote-control` daemon running in the background. |
 | `auto_update_cli` | `true` | Automatically update the `/data/bin/agy` binary to the latest upstream release on app startup. |
 | `workspace_dir` | `"/homeassistant"` | Default working directory (`/homeassistant` is also symlinked at `/config`). |

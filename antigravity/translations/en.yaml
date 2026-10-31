@@ -4,6 +4,13 @@ configuration:
     description: >-
       Label displayed for this Home Assistant server in Google Antigravity
       Remote Control (https://antigravity.google).
+  permission_mode:
+    name: Default Working / Permission Mode
+    description: >-
+      Controls how Antigravity executes terminal commands, edits files, and
+      reviews artifacts (turbo = full autonomy with no prompts or sandbox;
+      auto = auto-evaluate safe commands; default = ask before sensitive
+      operations; request_review = always ask for approval).
   remote_control:
     name: Enable Remote Control Daemon
     description: >-
