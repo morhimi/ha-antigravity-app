@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+- Fixed broken/truncated Google OAuth URL in the Ingress web terminal (`ttyd`) by running first-time authentication via `agy -p` directly in `ttyd` (without `tmux` / TUI box margin line-splitting or mouse capture), keeping the entire OAuth URL clickable as a single unbroken link.
+
 ## 1.1.0
 
 - Upgraded base image to **Debian 13 (`trixie`)** via `ghcr.io/home-assistant/base-debian:trixie`.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Launches or attaches to the persistent tmux session for the Ingress Web UI
+# Launches the interactive Antigravity session for the Ingress Web UI
 # ==============================================================================
 
 set -euo pipefail
@@ -11,4 +11,4 @@ export TERM="xterm-256color"
 export SSH_CONNECTION="127.0.0.1 0 127.0.0.1 22"
 export PATH="/data/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-exec tmux new-session -A -s antigravity /usr/local/bin/agy-welcome
+exec /usr/local/bin/agy-welcome

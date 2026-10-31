@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Interactive welcome shell and first-time authentication helper inside tmux
+# Interactive welcome shell and first-time authentication helper
 # ==============================================================================
 
 export HOME="/root"
@@ -25,10 +25,13 @@ printf "    \033[1magy remote-control status\033[0m  Check Remote Control daemon
 printf "    \033[1mha core check\033[0m              Validate Home Assistant configuration\n"
 printf "\033[1;36m==================================================================\033[0m\n\n"
 
-# If not yet authenticated, automatically launch agy for one-step sign-in
-if [ ! -f /data/.gemini/antigravity-cli/antigravity_state.pbtxt ] && [ -z "${GEMINI_API_KEY:-}" ]; then
-    printf "\033[1;33mFirst-time setup: Launching 'agy' to sign in with your Google Account...\033[0m\n\n"
-    /usr/local/bin/agy || true
-fi
+# Use print mode (-p) for initial sign-in so the OAuth URL is emitted as a
+# single unbroken soft-wrapped line in ttyd (instead of TUI box-wrapped rows).
+while [ ! -f /data/.gemini/antigravity-cli/antigravity_state.pbtxt ] && [ -z "${GEMINI_API_KEY:-}" ]; do
+    printf "\033[1;33mFirst-time setup: Sign in with your Google Account below.\033[0m\n"
+    printf "\033[0;36mClick the full URL below, sign in, and paste the authorization code:\033[0m\n\n"
+    /usr/local/bin/agy -p "Reply with Ready." || true
+    echo ""
+done
 
 exec /bin/bash -l
