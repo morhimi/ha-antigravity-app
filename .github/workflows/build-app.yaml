@@ -36,6 +36,7 @@ jobs:
       - name: Normalize app information
         id: normalize
         run: |
+          # shellcheck disable=SC2086
           image=${{ steps.info.outputs.image }}
           echo "image_name=${image##*/}" >> "$GITHUB_OUTPUT"
           echo "registry_prefix=${image%/*}" >> "$GITHUB_OUTPUT"

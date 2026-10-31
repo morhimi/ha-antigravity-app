@@ -46,6 +46,7 @@ jobs:
           CHANGED_FILES: ${{ steps.changed_files.outputs.all_changed_files }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
+          # shellcheck disable=SC2086
           changed_apps=()
 
           # Build all apps on workflow_dispatch, initial commit, or workflow changes

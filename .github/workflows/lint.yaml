@@ -23,11 +23,19 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
 
       - name: Run Home Assistant App Linter
         uses: frenck/action-addon-linter@v2.21.1
         with:
           path: "./antigravity"
+
+      - name: Run hadolint on Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: "./antigravity/Dockerfile"
+          config: "./.hadolint.yaml"
 
       - name: Install yamllint and shellcheck
         run: |
@@ -45,5 +53,107 @@ jobs:
             antigravity/rootfs/etc/services.d/ttyd/finish \
             antigravity/rootfs/etc/services.d/agy-remote/run \
             antigravity/rootfs/etc/services.d/agy-remote/finish \
+            antigravity/rootfs/usr/local/bin/agy-apply-mode \
             antigravity/rootfs/usr/local/bin/agy-terminal \
             antigravity/rootfs/usr/local/bin/agy-welcome
+
+      - name: Run actionlint on GitHub Actions workflows
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+      - name: Run gitleaks secret scanner
+        run: |
+          gitleaks_ver="8.24.0"
+          curl -fsSL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${gitleaks_ver}/gitleaks_${gitleaks_ver}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks git --verbose --redact .
+
+  smoke-test:
+    name: Smoke Test & Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Build App container image (amd64)
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --build-arg TARGETARCH=amd64 \
+            --tag antigravity:smoke-test \
+            --load \
+            ./antigravity
+
+      - name: Run Trivy container and config security scan
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: "antigravity:smoke-test"
+          format: "table"
+          exit-code: "0"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+
+      - name: Boot container and run end-to-end health checks
+        run: |
+          cache_dir="$(mktemp -d)"
+          chmod 700 "${cache_dir}"
+          cat << 'EOF' > "${cache_dir}/addons.self.options.config.cache"
+          {
+            "instance_name": "ci-smoke-test",
+            "permission_mode": "turbo",
+            "remote_control": true,
+            "auto_update_cli": false,
+            "workspace_dir": "/homeassistant",
+            "ha_mcp_enabled": true,
+            "ha_mcp_url": "http://homeassistant:8123/api/mcp",
+            "ha_mcp_token": "ci-test-token",
+            "log_level": "info"
+          }
+          EOF
+          chmod 600 "${cache_dir}/addons.self.options.config.cache"
+
+          docker run -d \
+            --name antigravity-smoke \
+            -p 127.0.0.1:8099:8099 \
+            -e CACHE_DIR=/tmp/.bashio \
+            -v "${cache_dir}:/tmp/.bashio" \
+            antigravity:smoke-test
+
+          for _ in {1..30}; do
+            if curl -fsS http://127.0.0.1:8099/ >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+
+          docker logs antigravity-smoke
+
+          # 1. Verify ttyd Ingress endpoint is serving HTTP 200
+          curl -fsS http://127.0.0.1:8099/ >/dev/null
+
+          # 2. Verify agy CLI binary is installed in persistent /data/bin/agy
+          docker exec antigravity-smoke /usr/local/bin/agy --version
+
+          # 3. Verify Turbo mode is applied in config.json and settings.json
+          docker exec antigravity-smoke jq -e \
+            '.userSettings.permissionPreset == "AGENT_PERMISSION_PRESET_TURBO"' \
+            /data/.gemini/config/config.json
+          docker exec antigravity-smoke jq -e \
+            '.permissionPreset == "Turbo" and .agentMode == "auto"' \
+            /data/.gemini/antigravity-cli/settings.json
+
+          # 4. Verify Home Assistant MCP configuration
+          docker exec antigravity-smoke jq -e \
+            '.mcpServers["home-assistant"].url == "http://homeassistant:8123/api/mcp"' \
+            /data/.gemini/config/mcp_config.json
+
+          # 5. Verify persistent SSH keypair and non-interactive ssh_config
+          docker exec antigravity-smoke test -f /data/.ssh/id_ed25519
+          docker exec antigravity-smoke test -f /data/.ssh/id_ed25519.pub
+          docker exec antigravity-smoke grep -q "StrictHostKeyChecking accept-new" /data/.ssh/config
+
+          docker rm -f antigravity-smoke
+          sudo rm -rf "${cache_dir}"
