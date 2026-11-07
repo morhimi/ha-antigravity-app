@@ -87,6 +87,7 @@ jobs:
       - name: Run Trivy config security scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: "latest"
           scan-type: "config"
           scan-ref: "./antigravity"
           format: "sarif"
@@ -106,6 +107,7 @@ jobs:
       - name: Run Trivy container image vulnerability scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: "latest"
           scan-type: "image"
           image-ref: "antigravity:smoke-test"
           format: "sarif"
