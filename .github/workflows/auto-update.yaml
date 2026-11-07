@@ -11,20 +11,19 @@ concurrency:
 
 permissions:
   contents: write
-  id-token: write
-  packages: write
+  pull-requests: write
 
 jobs:
   check-updates:
     name: Check upstream dependencies
     runs-on: ubuntu-latest
-    outputs:
-      updated: ${{ steps.check.outputs.updated }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
 
-      - name: Check for upstream updates
+      - name: Check for upstream updates and open PR
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -63,7 +62,6 @@ jobs:
 
           if [[ ${#updates[@]} -eq 0 ]]; then
             echo "All upstream dependencies (base-debian:trixie, ttyd, ha CLI) are up to date."
-            echo "updated=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -87,24 +85,30 @@ jobs:
           } > "${tmp_cl}"
           mv "${tmp_cl}" "${changelog_file}"
 
+          branch_name="chore/auto-update-dependencies"
+          git checkout -B "${branch_name}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "${dockerfile}" "${config_file}" "${changelog_file}"
           git commit -m "chore(deps): auto-update upstream dependencies (v${new_ver})"
-          git push origin main
+          git push -f origin "${branch_name}"
 
-          echo "updated=true" >> "$GITHUB_OUTPUT"
+          updates_text=""
+          for line in "${updates[@]}"; do
+            updates_text+="${line}"$'\n'
+          done
 
-  build-updated-app:
-    name: Build and Release Updated App
-    needs: check-updates
-    if: needs.check-updates.outputs.updated == 'true'
-    permissions:
-      contents: write
-      id-token: write
-      packages: write
-    uses: ./.github/workflows/build-app.yaml
-    with:
-      app: antigravity
-      publish: true
-    secrets: inherit
+          pr_title="chore(deps): auto-update upstream dependencies (v${new_ver})"
+          pr_body="$(printf 'Automated upstream dependency update detected by scheduled workflow:\n\n%s\n---\n*Automated update created by [Auto-Update Upstream Dependencies](https://github.com/%s/actions/workflows/auto-update.yaml)*\n' "${updates_text}" "${{ github.repository }}")"
+
+          if ! gh pr view "${branch_name}" >/dev/null 2>&1; then
+            gh pr create \
+              --head "${branch_name}" \
+              --base main \
+              --title "${pr_title}" \
+              --body "${pr_body}"
+          else
+            gh pr edit "${branch_name}" \
+              --title "${pr_title}" \
+              --body "${pr_body}"
+          fi

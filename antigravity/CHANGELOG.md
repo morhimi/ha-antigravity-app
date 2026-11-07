@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.4
+
+- Updated `ghcr.io/home-assistant/base-debian:trixie` base image (`sha256:d996c8f8ef0`).
+- Switched upstream dependency auto-updater to a Pull Request workflow complying with repository branch protection rules.
+
 ## 1.3.3
 
 - Log Home Assistant App version and active Antigravity CLI (`agy`) version on container startup (`cont-init.d/10-init-antigravity.sh`), service initialization (`agy-remote`, `ttyd`), and Ingress terminal welcome banner.
