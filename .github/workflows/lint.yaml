@@ -183,5 +183,9 @@ jobs:
           docker exec antigravity-smoke test -f /data/.ssh/id_ed25519.pub
           docker exec antigravity-smoke grep -q "StrictHostKeyChecking accept-new" /data/.ssh/config
 
+          # 6. Verify App and CLI versions are logged on startup
+          docker logs antigravity-smoke | grep -E "Starting Home Assistant App: Antigravity CLI v"
+          docker logs antigravity-smoke | grep -E "Active Antigravity CLI \(agy\) version:"
+
           docker rm -f antigravity-smoke
           sudo rm -rf "${cache_dir}"

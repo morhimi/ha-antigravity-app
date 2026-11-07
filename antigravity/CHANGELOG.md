@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.3
+
+- Log Home Assistant App version and active Antigravity CLI (`agy`) version on container startup (`cont-init.d/10-init-antigravity.sh`), service initialization (`agy-remote`, `ttyd`), and Ingress terminal welcome banner.
+
 ## 1.3.2
 
 - Updated `trustedWorkspaces` in `agy-apply-mode` and documentation to match Home Assistant Apps mount paths (`/app_configs` and `/local_apps`).

@@ -24,6 +24,9 @@ workspace_dir="$(bashio::config 'workspace_dir')"
 mkdir -p "${workspace_dir}"
 cd "${workspace_dir}" || exit 1
 
+agy_version="$(/usr/local/bin/agy --version 2>/dev/null || echo 'unknown')"
+bashio::log.info "Starting Antigravity Remote Control supervisor (instance: ${instance_name}, agy v${agy_version})..."
+
 cleanup() {
     bashio::log.info "Stopping Antigravity Remote Control daemon..."
     /usr/local/bin/agy remote-control stop >/dev/null 2>&1 || true

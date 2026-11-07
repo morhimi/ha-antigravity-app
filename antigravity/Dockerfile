@@ -63,6 +63,9 @@ RUN \
     && curl -fsSL https://antigravity.google/cli/install.sh | bash -s -- --dir /opt/antigravity/bin \
     && rm -rf /root/.cache
 
+# Copy app configuration metadata for local version resolution
+COPY config.yaml /etc/antigravity/config.yaml
+
 # Copy root filesystem
 COPY rootfs /
 

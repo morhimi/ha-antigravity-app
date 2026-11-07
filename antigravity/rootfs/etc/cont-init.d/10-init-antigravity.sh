@@ -11,6 +11,22 @@ if bashio::config.has_value 'log_level'; then
     bashio::log.level "$(bashio::config 'log_level')"
 fi
 
+# Resolve App version
+app_version=""
+if [ -n "${SUPERVISOR_TOKEN:-}" ]; then
+    app_version="$(bashio::app.version 2>/dev/null || true)"
+fi
+if [ -z "${app_version}" ] && [ -f /etc/antigravity/config.yaml ]; then
+    app_version="$(awk -F'"' '/^version:/{print $2}' /etc/antigravity/config.yaml 2>/dev/null || true)"
+fi
+if [ -z "${app_version}" ]; then
+    app_version="unknown"
+fi
+
+mkdir -p /etc/antigravity
+printf '%s' "${app_version}" > /etc/antigravity/app-version
+
+bashio::log.info "Starting Home Assistant App: Antigravity CLI v${app_version}..."
 bashio::log.info "Initializing Antigravity CLI persistent environment..."
 
 # 1. Create persistent directories in /data
@@ -68,6 +84,9 @@ if bashio::config.true 'auto_update_cli'; then
 fi
 
 ln -sfn /data/bin/agy /usr/local/bin/agy
+
+agy_version="$(/usr/local/bin/agy --version 2>/dev/null || echo 'unknown')"
+bashio::log.info "Active Antigravity CLI (agy) version: ${agy_version}"
 
 # 5. Configure Remote Control instance name and default working/permission mode
 instance_name="$(bashio::config 'instance_name')"
@@ -204,4 +223,4 @@ alias agy-status='agy remote-control status'
 EOF
 fi
 
-bashio::log.info "Antigravity CLI initialization complete."
+bashio::log.info "Antigravity CLI initialization complete (App v${app_version}, agy v${agy_version})."

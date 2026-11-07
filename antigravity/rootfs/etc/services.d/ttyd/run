@@ -20,7 +20,8 @@ fi
 
 cd "${workspace_dir}" || exit 1
 
-bashio::log.info "Starting Antigravity Ingress web terminal (ttyd) on port 8099..."
+agy_version="$(/usr/local/bin/agy --version 2>/dev/null || echo 'unknown')"
+bashio::log.info "Starting Antigravity Ingress web terminal (ttyd) on port 8099 (agy v${agy_version})..."
 
 exec /usr/bin/ttyd \
     --port 8099 \
