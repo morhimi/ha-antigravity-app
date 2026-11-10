@@ -27,12 +27,40 @@ This app runs the **Google Antigravity CLI (`agy`)** inside a persistent Debian 
 | `remote_control` | `true` | Keep the `agy remote-control` daemon running in the background. |
 | `auto_update_cli` | `true` | Automatically update the `/data/bin/agy` binary to the latest upstream release on app startup. |
 | `workspace_dir` | `"/homeassistant"` | Default working directory (`/homeassistant` is also symlinked at `/config`). |
+| `api_enabled` | `true` | Run the local HTTP REST API daemon (`agy-api`) on `api_port` for Home Assistant automations. |
+| `api_port` | `8120` | Internal TCP port for the local REST API daemon. |
+| `default_model` | `"gemini-3.8-flash-low"` | Default model used by `/api/generate` when `model` is omitted in the request payload. |
 | `ha_mcp_enabled` | `true` | Automatically configure `~/.gemini/config/mcp_config.json` with the `home-assistant` MCP server when `ha_mcp_token` is provided. |
 | `ha_mcp_url` | `"http://homeassistant:8123/api/mcp"` | Home Assistant native MCP server endpoint. |
 | `ha_mcp_token` | *(optional)* | Long-Lived Access Token from your Home Assistant user profile for `/api/mcp`. |
 | `ssh_private_key` | *(optional)* | SSH private key for connecting to external hosts (e.g., OpenWrt APs). Accepts a file path (`/ssl/id_ed25519`), a Base64-encoded key (`base64 < ~/.ssh/id_ed25519 \| tr -d '\n'`), or a raw OpenSSH private key. If left blank, a persistent Ed25519 keypair is generated in `/data/.ssh/id_ed25519` and its public key is printed in the App startup log and Web UI banner. |
 | `gemini_api_key` | *(optional)* | Optional `GEMINI_API_KEY` if authenticating with an API key instead of OAuth. |
 | `log_level` | `"info"` | App script log verbosity (`trace`, `debug`, `info`, `notice`, `warning`, `error`, `fatal`). |
+
+---
+
+## Local REST API for Automations (`agy-api`)
+
+When `api_enabled: true`, the app runs a lightweight async HTTP REST daemon on port `8120` (`POST /api/generate` and `GET /health`) so Home Assistant automations can invoke `agy -p` with prompts and media files (`/media/...`).
+
+Example `configuration.yaml` setup:
+
+```yaml
+rest_command:
+  antigravity_vision:
+    url: "http://68eea963-antigravity:8120/api/generate"
+    method: POST
+    content_type: "application/json"
+    timeout: 60
+    payload: >-
+      {
+        "prompt": {{ prompt | tojson }},
+        "files": {{ files | default([]) | tojson }},
+        "model": "{{ model | default('gemini-3.8-flash-low') }}"
+      }
+```
+
+The JSON response (`{"status": "success", "response": "...", "model": "...", "duration_seconds": ...}`) is returned in `response_variable['content']['response']`.
 
 ---
 

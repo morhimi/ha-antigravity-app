@@ -54,6 +54,8 @@ jobs:
             antigravity/rootfs/etc/services.d/ttyd/finish \
             antigravity/rootfs/etc/services.d/agy-remote/run \
             antigravity/rootfs/etc/services.d/agy-remote/finish \
+            antigravity/rootfs/etc/services.d/agy-api/run \
+            antigravity/rootfs/etc/services.d/agy-api/finish \
             antigravity/rootfs/usr/local/bin/agy-apply-mode \
             antigravity/rootfs/usr/local/bin/agy-terminal \
             antigravity/rootfs/usr/local/bin/agy-welcome
@@ -137,6 +139,9 @@ jobs:
             "remote_control": true,
             "auto_update_cli": false,
             "workspace_dir": "/homeassistant",
+            "api_enabled": true,
+            "api_port": 8120,
+            "default_model": "gemini-3.8-flash-low",
             "ha_mcp_enabled": true,
             "ha_mcp_url": "http://homeassistant:8123/api/mcp",
             "ha_mcp_token": "ci-test-token",
@@ -148,12 +153,14 @@ jobs:
           docker run -d \
             --name antigravity-smoke \
             -p 127.0.0.1:8099:8099 \
+            -p 127.0.0.1:8120:8120 \
             -e CACHE_DIR=/tmp/.bashio \
             -v "${cache_dir}:/tmp/.bashio" \
             antigravity:smoke-test
 
           for _ in {1..30}; do
-            if curl -fsS http://127.0.0.1:8099/ >/dev/null 2>&1; then
+            if curl -fsS http://127.0.0.1:8099/ >/dev/null 2>&1 \
+              && curl -fsS http://127.0.0.1:8120/health >/dev/null 2>&1; then
               break
             fi
             sleep 1
@@ -163,6 +170,9 @@ jobs:
 
           # 1. Verify ttyd Ingress endpoint is serving HTTP 200
           curl -fsS http://127.0.0.1:8099/ >/dev/null
+
+          # 1b. Verify agy-api REST endpoint is healthy on port 8120
+          curl -fsS http://127.0.0.1:8120/health | jq -e '.status == "ok" and .service == "agy-api"'
 
           # 2. Verify agy CLI binary is installed in persistent /data/bin/agy
           docker exec antigravity-smoke /usr/local/bin/agy --version

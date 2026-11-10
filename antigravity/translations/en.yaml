@@ -26,6 +26,21 @@ configuration:
     description: >-
       Default working directory for 'agy' sessions (defaults to /homeassistant,
       your Home Assistant configuration folder).
+  api_enabled:
+    name: Enable Local REST API Daemon
+    description: >-
+      Run the local HTTP REST API daemon (agy-api) so Home Assistant
+      automations can call Antigravity (POST /api/generate) using your
+      configured model.
+  api_port:
+    name: Local REST API Port
+    description: >-
+      Internal TCP port for the Antigravity REST API daemon (default: 8120).
+  default_model:
+    name: Default REST API Model
+    description: >-
+      Default model used by the REST API daemon when a request does not
+      specify a model explicitly (defaults to gemini-3.8-flash-low).
   ha_mcp_enabled:
     name: Configure Home Assistant MCP Server
     description: >-
@@ -57,3 +72,5 @@ configuration:
     name: Log Level
     description: >-
       Controls the verbosity of the app supervisor scripts.
+network:
+  8120/tcp: Local REST API for Home Assistant Automations

@@ -100,6 +100,16 @@ workspace_dir="$(bashio::config 'workspace_dir')"
 /usr/local/bin/agy-apply-mode "${permission_mode}" "${workspace_dir}"
 bashio::log.info "Configured Antigravity working/permission mode: ${permission_mode}"
 
+if bashio::config.true 'api_enabled'; then
+    api_port="$(bashio::config 'api_port')"
+    default_model="$(bashio::config 'default_model')"
+    printf '%s' "${api_port:-8120}" > /data/.gemini/antigravity-cli/api-port
+    printf '%s' "${default_model:-gemini-3.8-flash-low}" > /data/.gemini/antigravity-cli/default-model
+    bashio::log.info "Configured local REST API daemon on port ${api_port:-8120} (default model: ${default_model:-gemini-3.8-flash-low})"
+else
+    rm -f /data/.gemini/antigravity-cli/api-port
+fi
+
 # 6. Configure SSH client identity (/data/.ssh) and non-interactive defaults
 ssh_dir="/data/.ssh"
 ssh_key="${ssh_dir}/id_ed25519"

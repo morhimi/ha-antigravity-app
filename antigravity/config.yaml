@@ -1,10 +1,10 @@
 # https://contributors.home-assistant.io/apps/reference/configuration/
 name: Antigravity CLI
-version: "1.3.4"
+version: "1.4.0"
 slug: antigravity
 description: >-
   Google Antigravity autonomous AI agent CLI (agy) with persistent Remote
-  Control daemon and Ingress web terminal
+  Control daemon, local REST API, and Ingress web terminal
 url: "https://github.com/morhimi/ha-antigravity-app/tree/main/antigravity"
 arch:
   - aarch64
@@ -17,6 +17,10 @@ init: false
 panel_icon: mdi:robot-outline
 panel_title: Antigravity
 startup: services
+ports:
+  8120/tcp: 8120
+ports_description:
+  8120/tcp: "Local REST API for Home Assistant Automations"
 map:
   - all_app_configs:rw
   - local_apps:rw
@@ -31,6 +35,9 @@ options:
   remote_control: true
   auto_update_cli: true
   workspace_dir: "/homeassistant"
+  api_enabled: true
+  api_port: 8120
+  default_model: "gemini-3.8-flash-low"
   ha_mcp_enabled: true
   ha_mcp_url: "http://homeassistant:8123/api/mcp"
   log_level: "info"
@@ -40,6 +47,9 @@ schema:
   remote_control: bool
   auto_update_cli: bool
   workspace_dir: str
+  api_enabled: bool
+  api_port: port
+  default_model: list(gemini-3.8-flash-low|gemini-3.8-flash-medium|gemini-3.8-flash-high|gemini-4-argon-low|gemini-4-argon-medium|gemini-4-argon-high)
   ha_mcp_enabled: bool
   ha_mcp_url: str
   ha_mcp_token: password?

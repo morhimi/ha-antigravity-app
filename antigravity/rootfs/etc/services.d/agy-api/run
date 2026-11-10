@@ -1,0 +1,45 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Home Assistant App: Antigravity CLI
+# Starts the local Antigravity REST API daemon (agy-api)
+# ==============================================================================
+
+set -uo pipefail
+
+export HOME="/root"
+export SHELL="/bin/bash"
+export TERM="xterm-256color"
+export SSH_CONNECTION="127.0.0.1 0 127.0.0.1 22"
+export PATH="/data/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+if ! bashio::config.true 'api_enabled'; then
+    bashio::log.info "Antigravity REST API daemon is disabled via app configuration."
+    exec s6-svc -Od .
+fi
+
+api_port="$(bashio::config 'api_port')"
+default_model="$(bashio::config 'default_model')"
+workspace_dir="$(bashio::config 'workspace_dir')"
+
+if [ -z "${api_port}" ] || [ "${api_port}" = "null" ]; then
+    api_port="8120"
+fi
+if [ -z "${default_model}" ] || [ "${default_model}" = "null" ]; then
+    default_model="gemini-3.8-flash-low"
+fi
+if [ -z "${workspace_dir}" ] || [ "${workspace_dir}" = "null" ]; then
+    workspace_dir="/homeassistant"
+fi
+
+mkdir -p "${workspace_dir}"
+cd "${workspace_dir}" || exit 1
+
+export AGY_API_PORT="${api_port}"
+export AGY_DEFAULT_MODEL="${default_model}"
+export AGY_WORKSPACE="${workspace_dir}"
+
+agy_version="$(/usr/local/bin/agy --version 2>/dev/null || echo 'unknown')"
+bashio::log.info "Starting Antigravity REST API bridge on port ${AGY_API_PORT} (model: ${AGY_DEFAULT_MODEL}, agy v${agy_version})..."
+
+exec python3 /usr/local/bin/agy-api-server.py

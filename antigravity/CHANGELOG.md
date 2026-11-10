@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0
+
+- Added local HTTP REST API daemon (`agy-api`, `/usr/local/bin/agy-api-server.py`) supervised by `s6-overlay` on port `8120` (`POST /api/generate` and `GET /health`) so Home Assistant automations (`rest_command`) can invoke `agy -p` with multimodal media files (`files`), prompts (`prompt`), and model selection (`model`, defaulting to `gemini-3.8-flash-low`).
+- Added `api_enabled`, `api_port`, and `default_model` configuration options and schema definitions in `config.yaml`.
+
 ## 1.3.4
 
 - Updated `ghcr.io/home-assistant/base-debian:trixie` base image (`sha256:d996c8f8ef0`).
