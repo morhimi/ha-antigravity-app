@@ -60,6 +60,13 @@ jobs:
             antigravity/rootfs/usr/local/bin/agy-terminal \
             antigravity/rootfs/usr/local/bin/agy-welcome
 
+      - name: Run Python syntax check & REST API unit test suite
+        run: |
+          python3 -m py_compile \
+            antigravity/rootfs/usr/local/bin/agy-api-server.py \
+            tests/test_agy_api.py
+          python3 -m unittest discover -s tests -v
+
       - name: Run actionlint on GitHub Actions workflows
         run: |
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
@@ -171,19 +178,47 @@ jobs:
           # 1. Verify ttyd Ingress endpoint is serving HTTP 200
           curl -fsS http://127.0.0.1:8099/ >/dev/null
 
-          # 1b. Verify agy-api REST endpoint is healthy on port 8120
-          curl -fsS http://127.0.0.1:8120/health | jq -e '.status == "ok" and .service == "agy-api"'
+          # 1b. Verify agy-api REST endpoint is healthy on port 8120 (including default_timeout=120)
+          curl -fsS http://127.0.0.1:8120/health | jq -e \
+            '.status == "ok" and .service == "agy-api" and .default_timeout == 120'
 
           # 2. Verify agy CLI binary is installed in persistent /data/bin/agy
           docker exec antigravity-smoke /usr/local/bin/agy --version
 
-          # 3. Verify Turbo mode is applied in config.json and settings.json
+          # 3. Verify all 4 permission modes in agy-apply-mode (turbo, auto, request_review, default)
           docker exec antigravity-smoke jq -e \
             '.userSettings.permissionPreset == "AGENT_PERMISSION_PRESET_TURBO"' \
             /data/.gemini/config/config.json
           docker exec antigravity-smoke jq -e \
             '.permissionPreset == "Turbo" and .agentMode == "auto"' \
             /data/.gemini/antigravity-cli/settings.json
+
+          docker exec antigravity-smoke /usr/local/bin/agy-apply-mode auto /homeassistant
+          docker exec antigravity-smoke jq -e \
+            '.userSettings.permissionPreset == "AGENT_PERMISSION_PRESET_AUTO" and .userSettings.enableTerminalSandbox == true' \
+            /data/.gemini/config/config.json
+          docker exec antigravity-smoke jq -e \
+            '.permissionPreset == "Auto" and .agentMode == "auto"' \
+            /data/.gemini/antigravity-cli/settings.json
+
+          docker exec antigravity-smoke /usr/local/bin/agy-apply-mode request_review /homeassistant
+          docker exec antigravity-smoke jq -e \
+            '.userSettings.permissionPreset == "AGENT_PERMISSION_PRESET_REQUEST_REVIEW"' \
+            /data/.gemini/config/config.json
+          docker exec antigravity-smoke jq -e \
+            '.permissionPreset == "Request Review" and .agentMode == "default"' \
+            /data/.gemini/antigravity-cli/settings.json
+
+          docker exec antigravity-smoke /usr/local/bin/agy-apply-mode default /homeassistant
+          docker exec antigravity-smoke jq -e \
+            '.userSettings.permissionPreset == "AGENT_PERMISSION_PRESET_DEFAULT"' \
+            /data/.gemini/config/config.json
+          docker exec antigravity-smoke jq -e \
+            '.permissionPreset == "Default" and .agentMode == "default"' \
+            /data/.gemini/antigravity-cli/settings.json
+
+          # Restore turbo mode
+          docker exec antigravity-smoke /usr/local/bin/agy-apply-mode turbo /homeassistant
 
           # 4. Verify Home Assistant MCP configuration
           docker exec antigravity-smoke jq -e \
@@ -198,6 +233,39 @@ jobs:
           # 6. Verify App and CLI versions are logged on startup
           docker logs antigravity-smoke | grep -E "Starting Home Assistant App: Antigravity CLI v"
           docker logs antigravity-smoke | grep -E "Active Antigravity CLI \(agy\) version:"
+
+          # 7. Verify live POST /api/generate E2E inside container with a stubbed agy binary
+          docker exec antigravity-smoke sh -c '
+            cp /data/bin/agy /data/bin/agy.real &&
+            printf "#!/bin/sh\necho \"E2E_OK:\$*\"\n" > /data/bin/agy &&
+            chmod +x /data/bin/agy
+          '
+          curl -fsS -X POST http://127.0.0.1:8120/api/generate \
+            -H "Content-Type: application/json" \
+            -d '{"prompt":"test-prompt","files":["/media/snap.jpg"],"model":"gemini-3.8-flash-low"}' \
+            | jq -e '.status == "success" and (.response | contains("E2E_OK:")) and (.response | contains("/media/snap.jpg"))'
+          docker exec antigravity-smoke mv -f /data/bin/agy.real /data/bin/agy
+
+          # 8. Verify persistence across container restart (SSH key + custom user config preserved)
+          orig_pub="$(docker exec antigravity-smoke cat /data/.ssh/id_ed25519.pub)"
+          docker exec antigravity-smoke sh -c '
+            jq ".customTestKey = \"preserved\"" /data/.gemini/config/config.json > /tmp/cfg.json &&
+            mv /tmp/cfg.json /data/.gemini/config/config.json &&
+            jq ".mcpServers[\"custom-mcp\"] = {\"url\":\"http://localhost:9999\"}" /data/.gemini/config/mcp_config.json > /tmp/mcp.json &&
+            mv /tmp/mcp.json /data/.gemini/config/mcp_config.json
+          '
+          docker restart antigravity-smoke
+          for _ in {1..30}; do
+            if curl -fsS http://127.0.0.1:8120/health >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          new_pub="$(docker exec antigravity-smoke cat /data/.ssh/id_ed25519.pub)"
+          test "${orig_pub}" = "${new_pub}"
+          docker exec antigravity-smoke jq -e '.customTestKey == "preserved"' /data/.gemini/config/config.json
+          docker exec antigravity-smoke jq -e '.mcpServers["custom-mcp"].url == "http://localhost:9999"' /data/.gemini/config/mcp_config.json
+          docker exec antigravity-smoke jq -e '.mcpServers["home-assistant"].url == "http://homeassistant:8123/api/mcp"' /data/.gemini/config/mcp_config.json
 
           docker rm -f antigravity-smoke
           sudo rm -rf "${cache_dir}"
