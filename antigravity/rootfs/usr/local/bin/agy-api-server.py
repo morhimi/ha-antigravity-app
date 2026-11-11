@@ -38,6 +38,30 @@ def _derive_effort(model: str, explicit_effort: str | None) -> str:
     return "low"
 
 
+def _parse_cli_json_output(raw_stdout: str) -> tuple[str, dict]:
+    """Extract clean response and usage dict from CLI stdout, tolerating prefix banner lines."""
+    candidates = [raw_stdout]
+    start_idx = raw_stdout.find("{")
+    end_idx = raw_stdout.rfind("}")
+    if start_idx != -1 and end_idx > start_idx:
+        sliced = raw_stdout[start_idx : end_idx + 1]
+        if sliced != raw_stdout:
+            candidates.append(sliced)
+
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                response_text = str(parsed.get("response", raw_stdout)).strip()
+                usage = parsed.get("usage")
+                usage_data = usage if isinstance(usage, dict) else {}
+                return response_text, usage_data
+        except json.JSONDecodeError:
+            continue
+
+    return raw_stdout.strip(), {}
+
+
 async def run_agy_inference(
     prompt: str,
     files: list[str],
@@ -99,19 +123,7 @@ async def run_agy_inference(
     if proc.returncode != 0:
         raise RuntimeError(f"agy exited with code {proc.returncode}: {err_text or raw_stdout}")
 
-    # Extract final clean response and usage metrics from CLI JSON output
-    response_text = raw_stdout
-    usage_data = {}
-    try:
-        parsed = json.loads(raw_stdout)
-        if isinstance(parsed, dict):
-            if "response" in parsed:
-                response_text = str(parsed["response"]).strip()
-            if "usage" in parsed and isinstance(parsed["usage"], dict):
-                usage_data = parsed["usage"]
-    except json.JSONDecodeError:
-        # Fallback to raw text if CLI didn't return valid JSON
-        response_text = raw_stdout.strip()
+    response_text, usage_data = _parse_cli_json_output(raw_stdout)
 
     result = {
         "status": "success",
@@ -189,13 +201,32 @@ class AgyApiServer:
                     await _send_json(writer, "400 Bad Request", {"status": "error", "message": "Invalid JSON payload"})
                     return
 
+                if not isinstance(data, dict):
+                    await _send_json(
+                        writer,
+                        "400 Bad Request",
+                        {"status": "error", "message": "JSON payload must be an object"},
+                    )
+                    return
+
                 prompt = str(data.get("prompt", "")).strip()
                 raw_files = data.get("files", [])
                 files = [raw_files] if isinstance(raw_files, str) else (raw_files if isinstance(raw_files, list) else [])
 
                 model = str(data.get("model") or DEFAULT_MODEL).strip()
                 effort = _derive_effort(model, data.get("effort"))
-                timeout = int(data.get("timeout") or DEFAULT_TIMEOUT)
+
+                try:
+                    timeout = int(data.get("timeout") or DEFAULT_TIMEOUT)
+                    if timeout <= 0:
+                        raise ValueError("timeout must be positive")
+                except (ValueError, TypeError):
+                    await _send_json(
+                        writer,
+                        "400 Bad Request",
+                        {"status": "error", "message": "Invalid 'timeout': must be a positive integer"},
+                    )
+                    return
 
                 if not prompt:
                     await _send_json(

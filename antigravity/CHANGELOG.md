@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.3
+
+- Hardened `agy-api-server.py` JSON stdout parsing (`_parse_cli_json_output`) to strip any leading CLI warning/banner noise before the JSON object, and added `400 Bad Request` validation for non-object JSON payloads and invalid `timeout` values.
+
 ## 1.4.2
 
 - Updated `agy-api-server.py` to invoke `agy` with `--output-format json` and extract the clean final `"response"` and `"usage"` metrics without intermediate tool-call turns or status logs.

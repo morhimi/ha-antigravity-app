@@ -34,10 +34,10 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.mock_agy = self.temp_path / "mock-agy"
 
         # Create a mock agy CLI script that returns --output-format json structure
-        # or simulates raw text fallback / slow timeout / failure
+        # or simulates prefix noise / concurrency tracking / raw text fallback / slow timeout / failure
         self.mock_agy.write_text(
             "#!/usr/bin/env python3\n"
-            "import json, sys, time\n"
+            "import json, os, pathlib, sys, time\n"
             "args = sys.argv[1:]\n"
             "prompt = args[args.index('-p') + 1] if '-p' in args else ''\n"
             "if 'SIMULATE_TIMEOUT' in prompt:\n"
@@ -47,6 +47,21 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
             "    sys.exit(2)\n"
             "if 'SIMULATE_RAW_TEXT' in prompt:\n"
             "    print('raw non-json cli output')\n"
+            "    sys.exit(0)\n"
+            "if 'SIMULATE_PREFIX_NOISE' in prompt:\n"
+            "    print('Warning: experimental flag enabled')\n"
+            "    print(json.dumps({'response': 'clean response after banner', 'usage': {'tokens': 7}}))\n"
+            "    sys.exit(0)\n"
+            "if 'SIMULATE_CONCURRENCY' in prompt:\n"
+            "    active_dir = pathlib.Path(os.environ['AGY_WORKSPACE']) / 'active_procs'\n"
+            "    active_dir.mkdir(exist_ok=True)\n"
+            "    marker = active_dir / str(os.getpid())\n"
+            "    marker.write_text('1')\n"
+            "    time.sleep(0.15)\n"
+            "    current_active = len(list(active_dir.iterdir()))\n"
+            "    time.sleep(0.15)\n"
+            "    marker.unlink(missing_ok=True)\n"
+            "    print(json.dumps({'response': str(current_active)}))\n"
             "    sys.exit(0)\n"
             "print(json.dumps({\n"
             "    'response': json.dumps({'args': args, 'prompt': prompt}),\n"
@@ -74,7 +89,7 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         await self.server.wait_closed()
         self.temp_dir.cleanup()
 
-    async def _request(self, method: str, path: str, payload: dict | str | None = None) -> tuple[int, dict]:
+    async def _request(self, method: str, path: str, payload: dict | list | str | None = None) -> tuple[int, dict]:
         def _sync_req() -> tuple[int, dict]:
             if isinstance(payload, str):
                 data = payload.encode("utf-8")
@@ -140,6 +155,20 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Analyze the attached media files directly using native multimodal vision", inner["prompt"])
         self.assertIn("Describe doorbell clip", inner["prompt"])
 
+    async def test_text_only_prompt_omits_multimodal_directive(self) -> None:
+        status, body = await self._request(
+            "POST",
+            "/api/generate",
+            {
+                "prompt": "Summarize current energy usage",
+                "files": ["", "   "],
+            },
+        )
+        self.assertEqual(status, 200)
+        inner = json.loads(body["response"])
+        self.assertEqual(inner["prompt"], "Summarize current energy usage")
+        self.assertNotIn("Attached media files", inner["prompt"])
+
     async def test_vision_alias_and_string_file_fallback(self) -> None:
         status, body = await self._request(
             "POST",
@@ -156,6 +185,16 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertIn("high", inner["args"])
         self.assertIn("- /media/single.jpg", inner["prompt"])
 
+    async def test_prefix_banner_noise_before_json_is_stripped(self) -> None:
+        status, body = await self._request(
+            "POST",
+            "/api/generate",
+            {"prompt": "SIMULATE_PREFIX_NOISE"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["response"], "clean response after banner")
+        self.assertEqual(body["usage"], {"tokens": 7})
+
     async def test_raw_text_fallback_when_cli_not_json(self) -> None:
         status, body = await self._request(
             "POST",
@@ -166,11 +205,24 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["response"], "raw non-json cli output")
         self.assertNotIn("usage", body)
 
-    async def test_invalid_json_returns_400(self) -> None:
+    async def test_invalid_json_or_non_dict_returns_400(self) -> None:
         status, body = await self._request("POST", "/api/generate", "{not-valid-json")
         self.assertEqual(status, 400)
         self.assertEqual(body["status"], "error")
         self.assertIn("Invalid JSON payload", body["message"])
+
+        status2, body2 = await self._request("POST", "/api/generate", ["a", "list"])
+        self.assertEqual(status2, 400)
+        self.assertIn("must be an object", body2["message"])
+
+    async def test_invalid_timeout_returns_400(self) -> None:
+        status, body = await self._request("POST", "/api/generate", {"prompt": "Hello", "timeout": "abc"})
+        self.assertEqual(status, 400)
+        self.assertIn("Invalid 'timeout'", body["message"])
+
+        status2, body2 = await self._request("POST", "/api/generate", {"prompt": "Hello", "timeout": -10})
+        self.assertEqual(status2, 400)
+        self.assertIn("Invalid 'timeout'", body2["message"])
 
     async def test_missing_prompt_returns_400(self) -> None:
         status, body = await self._request("POST", "/api/generate", {"prompt": "   "})
@@ -203,6 +255,18 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 500)
         self.assertEqual(body["status"], "error")
         self.assertIn("simulated agy cli failure", body["message"])
+
+    async def test_semaphore_limits_concurrency_to_two(self) -> None:
+        results = await asyncio.gather(
+            self._request("POST", "/api/generate", {"prompt": "SIMULATE_CONCURRENCY"}),
+            self._request("POST", "/api/generate", {"prompt": "SIMULATE_CONCURRENCY"}),
+            self._request("POST", "/api/generate", {"prompt": "SIMULATE_CONCURRENCY"}),
+            self._request("POST", "/api/generate", {"prompt": "SIMULATE_CONCURRENCY"}),
+        )
+        for status, body in results:
+            self.assertEqual(status, 200)
+            active_count = int(body["response"])
+            self.assertLessEqual(active_count, 2)
 
 
 if __name__ == "__main__":

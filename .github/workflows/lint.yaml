@@ -267,5 +267,20 @@ jobs:
           docker exec antigravity-smoke jq -e '.mcpServers["custom-mcp"].url == "http://localhost:9999"' /data/.gemini/config/mcp_config.json
           docker exec antigravity-smoke jq -e '.mcpServers["home-assistant"].url == "http://homeassistant:8123/api/mcp"' /data/.gemini/config/mcp_config.json
 
+          # 9. Verify api_enabled: false disables agy-api cleanly via S6 while ttyd stays up
+          jq '.api_enabled = false' "${cache_dir}/addons.self.options.config.cache" > "${cache_dir}/tmp.cache"
+          mv "${cache_dir}/tmp.cache" "${cache_dir}/addons.self.options.config.cache"
+          chmod 600 "${cache_dir}/addons.self.options.config.cache"
+          docker restart antigravity-smoke
+          for _ in {1..30}; do
+            if curl -fsS http://127.0.0.1:8099/ >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          sleep 2
+          ! curl -fsS http://127.0.0.1:8120/health >/dev/null 2>&1
+          docker logs antigravity-smoke | grep -q "Antigravity REST API daemon is disabled via app configuration"
+
           docker rm -f antigravity-smoke
           sudo rm -rf "${cache_dir}"
