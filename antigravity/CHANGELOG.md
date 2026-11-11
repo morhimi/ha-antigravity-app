@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1
+
+- Increased default REST API inference timeout in `agy-api-server.py` from 60 seconds to 120 seconds (`AGY_DEFAULT_TIMEOUT=120`).
+
 ## 1.4.0
 
 - Added local HTTP REST API daemon (`agy-api`, `/usr/local/bin/agy-api-server.py`) supervised by `s6-overlay` on port `8120` (`POST /api/generate` and `GET /health`) so Home Assistant automations (`rest_command`) can invoke `agy -p` with multimodal media files (`files`), prompts (`prompt`), and model selection (`model`, defaulting to `gemini-3.8-flash-low`).

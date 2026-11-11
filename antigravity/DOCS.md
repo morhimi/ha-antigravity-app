@@ -51,12 +51,13 @@ rest_command:
     url: "http://68eea963-antigravity:8120/api/generate"
     method: POST
     content_type: "application/json"
-    timeout: 60
+    timeout: 120
     payload: >-
       {
         "prompt": {{ prompt | tojson }},
         "files": {{ files | default([]) | tojson }},
-        "model": "{{ model | default('gemini-3.8-flash-low') }}"
+        "model": "{{ model | default('gemini-3.8-flash-low') }}",
+        "timeout": {{ timeout | default(120) | int }}
       }
 ```
 

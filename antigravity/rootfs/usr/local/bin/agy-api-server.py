@@ -19,6 +19,7 @@ logger = logging.getLogger("agy-api")
 
 PORT = int(os.environ.get("AGY_API_PORT", "8120"))
 DEFAULT_MODEL = os.environ.get("AGY_DEFAULT_MODEL", "gemini-3.8-flash-low")
+DEFAULT_TIMEOUT = int(os.environ.get("AGY_DEFAULT_TIMEOUT", "120"))
 WORKSPACE = os.environ.get("AGY_WORKSPACE", "/homeassistant")
 AGY_BIN = os.environ.get("AGY_BIN") or (
     "/data/bin/agy" if os.path.exists("/data/bin/agy") else (shutil.which("agy") or "/usr/local/bin/agy")
@@ -148,6 +149,7 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     "status": "ok",
                     "service": "agy-api",
                     "default_model": DEFAULT_MODEL,
+                    "default_timeout": DEFAULT_TIMEOUT,
                 },
             )
             return
@@ -166,7 +168,7 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
             model = str(data.get("model") or DEFAULT_MODEL).strip()
             effort = _derive_effort(model, data.get("effort"))
-            timeout = int(data.get("timeout", 60))
+            timeout = int(data.get("timeout") or DEFAULT_TIMEOUT)
 
             if not prompt:
                 await _send_json(
@@ -220,9 +222,10 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 async def main() -> None:
     server = await asyncio.start_server(handle_client, "0.0.0.0", PORT)
     logger.info(
-        "Antigravity API bridge listening on port %d (default model: %s)...",
+        "Antigravity API bridge listening on port %d (default model: %s, default timeout: %ds)...",
         PORT,
         DEFAULT_MODEL,
+        DEFAULT_TIMEOUT,
     )
     async with server:
         await server.serve_forever()
