@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.2
+
+- Updated `agy-api-server.py` to invoke `agy` with `--output-format json` and extract the clean final `"response"` and `"usage"` metrics without intermediate tool-call turns or status logs.
+- Added a universal, language-agnostic multimodal directive when `files` are attached so `agy` analyzes media directly via native vision rather than spawning shell or `ffmpeg` commands.
+- Return `504 Gateway Timeout` on inference timeouts and `400 Bad Request` on malformed JSON payloads.
+
 ## 1.4.1
 
 - Increased default REST API inference timeout in `agy-api-server.py` from 60 seconds to 120 seconds (`AGY_DEFAULT_TIMEOUT=120`).

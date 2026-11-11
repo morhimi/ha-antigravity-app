@@ -33,7 +33,8 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.temp_path = Path(self.temp_dir.name)
         self.mock_agy = self.temp_path / "mock-agy"
 
-        # Create a mock agy CLI script that echoes its arguments as JSON or simulates slow/failing behavior
+        # Create a mock agy CLI script that returns --output-format json structure
+        # or simulates raw text fallback / slow timeout / failure
         self.mock_agy.write_text(
             "#!/usr/bin/env python3\n"
             "import json, sys, time\n"
@@ -44,7 +45,13 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
             "if 'SIMULATE_FAIL' in prompt:\n"
             "    sys.stderr.write('simulated agy cli failure\\n')\n"
             "    sys.exit(2)\n"
-            "print(json.dumps({'args': args, 'prompt': prompt}))\n",
+            "if 'SIMULATE_RAW_TEXT' in prompt:\n"
+            "    print('raw non-json cli output')\n"
+            "    sys.exit(0)\n"
+            "print(json.dumps({\n"
+            "    'response': json.dumps({'args': args, 'prompt': prompt}),\n"
+            "    'usage': {'input_tokens': 120, 'output_tokens': 45}\n"
+            "}))\n",
             encoding="utf-8",
         )
         self.mock_agy.chmod(self.mock_agy.stat().st_mode | stat.S_IEXEC)
@@ -55,7 +62,8 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         os.environ["AGY_DEFAULT_TIMEOUT"] = "120"
 
         self.srv_mod = load_server_module()
-        self.server = await asyncio.start_server(self.srv_mod.handle_client, "127.0.0.1", 0)
+        self.handler = self.srv_mod.AgyApiServer()
+        self.server = await asyncio.start_server(self.handler.handle_client, "127.0.0.1", 0)
         sockets = self.server.sockets
         assert sockets
         self.port = sockets[0].getsockname()[1]
@@ -66,10 +74,17 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         await self.server.wait_closed()
         self.temp_dir.cleanup()
 
-    async def _request(self, method: str, path: str, payload: dict | None = None) -> tuple[int, dict]:
+    async def _request(self, method: str, path: str, payload: dict | str | None = None) -> tuple[int, dict]:
         def _sync_req() -> tuple[int, dict]:
-            data = json.dumps(payload).encode("utf-8") if payload is not None else None
-            headers = {"Content-Type": "application/json"} if payload is not None else {}
+            if isinstance(payload, str):
+                data = payload.encode("utf-8")
+                headers = {"Content-Type": "application/json"}
+            elif payload is not None:
+                data = json.dumps(payload).encode("utf-8")
+                headers = {"Content-Type": "application/json"}
+            else:
+                data = None
+                headers = {}
             req = urllib.request.Request(f"{self.base_url}{path}", data=data, headers=headers, method=method)
             try:
                 with urllib.request.urlopen(req, timeout=5) as resp:
@@ -99,7 +114,7 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["default_model"], "gemini-3.8-flash-low")
         self.assertEqual(body["default_timeout"], 120)
 
-    async def test_generate_default_model_and_files_list(self) -> None:
+    async def test_generate_json_extraction_usage_and_multimodal_directive(self) -> None:
         status, body = await self._request(
             "POST",
             "/api/generate",
@@ -111,14 +126,18 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["status"], "success")
         self.assertEqual(body["model"], "gemini-3.8-flash-low")
+        self.assertEqual(body["usage"], {"input_tokens": 120, "output_tokens": 45})
         inner = json.loads(body["response"])
         self.assertIn("--model", inner["args"])
         self.assertIn("gemini-3.8-flash-low", inner["args"])
         self.assertIn("--effort", inner["args"])
         self.assertIn("low", inner["args"])
         self.assertIn("--dangerously-skip-permissions", inner["args"])
+        self.assertIn("--output-format", inner["args"])
+        self.assertIn("json", inner["args"])
         self.assertIn("- /media/clip1.mp4", inner["prompt"])
         self.assertIn("- /media/clip2.jpg", inner["prompt"])
+        self.assertIn("Analyze the attached media files directly using native multimodal vision", inner["prompt"])
         self.assertIn("Describe doorbell clip", inner["prompt"])
 
     async def test_vision_alias_and_string_file_fallback(self) -> None:
@@ -137,6 +156,22 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertIn("high", inner["args"])
         self.assertIn("- /media/single.jpg", inner["prompt"])
 
+    async def test_raw_text_fallback_when_cli_not_json(self) -> None:
+        status, body = await self._request(
+            "POST",
+            "/api/generate",
+            {"prompt": "SIMULATE_RAW_TEXT"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["response"], "raw non-json cli output")
+        self.assertNotIn("usage", body)
+
+    async def test_invalid_json_returns_400(self) -> None:
+        status, body = await self._request("POST", "/api/generate", "{not-valid-json")
+        self.assertEqual(status, 400)
+        self.assertEqual(body["status"], "error")
+        self.assertIn("Invalid JSON payload", body["message"])
+
     async def test_missing_prompt_returns_400(self) -> None:
         status, body = await self._request("POST", "/api/generate", {"prompt": "   "})
         self.assertEqual(status, 400)
@@ -147,14 +182,15 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         status, body = await self._request("GET", "/api/unknown")
         self.assertEqual(status, 404)
         self.assertEqual(body["status"], "error")
+        self.assertIn("/api/unknown", body["message"])
 
-    async def test_timeout_enforcement_kills_process(self) -> None:
+    async def test_timeout_enforcement_returns_504_and_kills_process(self) -> None:
         status, body = await self._request(
             "POST",
             "/api/generate",
             {"prompt": "SIMULATE_TIMEOUT", "timeout": 1},
         )
-        self.assertEqual(status, 500)
+        self.assertEqual(status, 504)
         self.assertEqual(body["status"], "error")
         self.assertIn("timed out after 1 seconds", body["message"])
 

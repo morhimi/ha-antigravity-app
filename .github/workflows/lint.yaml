@@ -237,13 +237,13 @@ jobs:
           # 7. Verify live POST /api/generate E2E inside container with a stubbed agy binary
           docker exec antigravity-smoke sh -c '
             cp /data/bin/agy /data/bin/agy.real &&
-            printf "#!/bin/sh\necho \"E2E_OK:\$*\"\n" > /data/bin/agy &&
+            printf "#!/bin/sh\nprintf \"{\\\"response\\\":\\\"E2E_OK:%s\\\",\\\"usage\\\":{\\\"tokens\\\":10}}\n\" \"\$*\"\n" > /data/bin/agy &&
             chmod +x /data/bin/agy
           '
           curl -fsS -X POST http://127.0.0.1:8120/api/generate \
             -H "Content-Type: application/json" \
             -d '{"prompt":"test-prompt","files":["/media/snap.jpg"],"model":"gemini-3.8-flash-low"}' \
-            | jq -e '.status == "success" and (.response | contains("E2E_OK:")) and (.response | contains("/media/snap.jpg"))'
+            | jq -e '.status == "success" and (.response | contains("E2E_OK:")) and (.response | contains("/media/snap.jpg")) and .usage.tokens == 10'
           docker exec antigravity-smoke mv -f /data/bin/agy.real /data/bin/agy
 
           # 8. Verify persistence across container restart (SSH key + custom user config preserved)
