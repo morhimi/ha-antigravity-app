@@ -33,6 +33,21 @@ Run **Google Antigravity CLI (`agy`)** and **Google Gemini (Pro / Flash)** 24/7 
 
 ---
 
+## Comparison: Free-Tier Gemini API vs. Antigravity App (`ha-antigravity-app`)
+
+Many Home Assistant users connect **Google Gemini** using a **Free-Tier Google AI Studio API Key** for doorbell and security camera analysis, which exposes private home camera footage to model training/human review and hits strict `429` rate limits:
+
+| Feature / Concern | Free-Tier Google AI Studio API Key | Pay-As-You-Go Cloud Billing API Key | **Antigravity Home Assistant App (`agy`)** |
+| :--- | :--- | :--- | :--- |
+| **Privacy & Model Training** | ⚠️ **Used to train Google models & subject to human review** (not suitable for home security cameras) | ✅ **Private** (Not used to train models) | ✅ **Private** (Governed by paid/workspace subscription terms & configurable telemetry) |
+| **Cost Model** | Free (`$0`) | Metered per-token billing (can spike if a camera motion loop triggers hundreds of video analyses) | **Included in your flat-rate Google AI / Antigravity subscription** (predictable monthly cost) |
+| **Rate Limits & Reliability** | ❌ Frequent `429 Resource Exhausted` errors on video clips | ✅ High | ✅ **High** (Paid tier priority + built-in async concurrency queue) |
+| **Models Available** | Limited free-tier subset | Per-token pricing (Pro models get expensive fast for video) | **`gemini-3.8-flash-low`**, **`gemini-3.1-pro-high`**, etc. |
+| **Multimodal Media Support** | Requires custom integration or base64 upload | Requires custom integration or base64 upload | **Native `/media/...` file paths** (`.mp4` video clips, `.jpg`/`.png` snapshots, audio) |
+| **Autonomous Smart-Home Agent** | ❌ Prompt-in / Text-out only | ❌ Prompt-in / Text-out only | ✅ **Full 24/7 Agent (`agy remote-control`)** + native Home Assistant **MCP (`/api/mcp`)** & `ha` CLI |
+
+---
+
 ## Popular Home Assistant + Gemini / Antigravity Use Cases
 
 1. **Multimodal Camera & Doorbell Video Analysis (No `429` Quota Errors)**:
