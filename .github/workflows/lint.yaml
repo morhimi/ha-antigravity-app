@@ -237,7 +237,7 @@ jobs:
           # 7. Verify live POST /api/generate E2E inside container with a stubbed agy binary
           docker exec antigravity-smoke sh -c '
             cp /data/bin/agy /data/bin/agy.real &&
-            printf "#!/bin/sh\nprintf \"{\\\"response\\\":\\\"E2E_OK:%s\\\",\\\"usage\\\":{\\\"tokens\\\":10}}\n\" \"\$*\"\n" > /data/bin/agy &&
+            printf "#!/usr/bin/env python3\nimport json, sys\nprint(json.dumps({\"response\": \"E2E_OK:\" + \" \".join(sys.argv[1:]), \"usage\": {\"tokens\": 10}}))\n" > /data/bin/agy &&
             chmod +x /data/bin/agy
           '
           curl -fsS -X POST http://127.0.0.1:8120/api/generate \
