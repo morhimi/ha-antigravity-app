@@ -279,7 +279,10 @@ jobs:
             sleep 1
           done
           sleep 2
-          ! curl -fsS http://127.0.0.1:8120/health >/dev/null 2>&1
+          if curl -fsS http://127.0.0.1:8120/health >/dev/null 2>&1; then
+            echo "ERROR: agy-api should be disabled when api_enabled=false"
+            exit 1
+          fi
           docker logs antigravity-smoke | grep -q "Antigravity REST API daemon is disabled via app configuration"
 
           docker rm -f antigravity-smoke
