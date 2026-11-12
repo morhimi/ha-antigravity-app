@@ -40,7 +40,7 @@ configuration:
     name: Default REST API Model
     description: >-
       Default model used by the REST API daemon when a request does not
-      specify a model explicitly (defaults to gemini-3.8-flash-low).
+      specify a model explicitly (defaults to gemini-4-hydrogen-low).
   ha_mcp_enabled:
     name: Configure Home Assistant MCP Server
     description: >-

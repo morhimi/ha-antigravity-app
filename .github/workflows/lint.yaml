@@ -148,7 +148,7 @@ jobs:
             "workspace_dir": "/homeassistant",
             "api_enabled": true,
             "api_port": 8120,
-            "default_model": "gemini-3.8-flash-low",
+            "default_model": "gemini-4-hydrogen-low",
             "ha_mcp_enabled": true,
             "ha_mcp_url": "http://homeassistant:8123/api/mcp",
             "ha_mcp_token": "ci-test-token",
@@ -242,7 +242,7 @@ jobs:
           '
           curl -fsS -X POST http://127.0.0.1:8120/api/generate \
             -H "Content-Type: application/json" \
-            -d '{"prompt":"test-prompt","files":["/media/snap.jpg"],"model":"gemini-3.8-flash-low"}' \
+            -d '{"prompt":"test-prompt","files":["/media/snap.jpg"],"model":"gemini-4-hydrogen-low"}' \
             | jq -e '.status == "success" and (.response | contains("E2E_OK:")) and (.response | contains("/media/snap.jpg")) and .usage.tokens == 10'
           docker exec antigravity-smoke mv -f /data/bin/agy.real /data/bin/agy
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.4
+
+- Updated the default REST API model (`default_model` / `AGY_DEFAULT_MODEL`) to `gemini-4-hydrogen-low`.
+- Expanded the `default_model` dropdown in `config.yaml` to include the new `Gemini 4 Hydrogen` (`low`, `medium`, `high`, `xhigh`), `Claude 5.5` (`sonnet` / `opus`), and `gpt-oss-120b-medium` models alongside `Gemini 3.8 Flash` and `Gemini 4 Argon`.
+
 ## 1.4.3
 
 - Hardened `agy-api-server.py` JSON stdout parsing (`_parse_cli_json_output`) to strip any leading CLI warning/banner noise before the JSON object, and added `400 Bad Request` validation for non-object JSON payloads and invalid `timeout` values.

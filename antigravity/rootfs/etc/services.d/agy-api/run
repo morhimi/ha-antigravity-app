@@ -26,7 +26,7 @@ if [ -z "${api_port}" ] || [ "${api_port}" = "null" ]; then
     api_port="8120"
 fi
 if [ -z "${default_model}" ] || [ "${default_model}" = "null" ]; then
-    default_model="gemini-3.8-flash-low"
+    default_model="gemini-4-hydrogen-low"
 fi
 if [ -z "${workspace_dir}" ] || [ "${workspace_dir}" = "null" ]; then
     workspace_dir="/homeassistant"

@@ -104,8 +104,8 @@ if bashio::config.true 'api_enabled'; then
     api_port="$(bashio::config 'api_port')"
     default_model="$(bashio::config 'default_model')"
     printf '%s' "${api_port:-8120}" > /data/.gemini/antigravity-cli/api-port
-    printf '%s' "${default_model:-gemini-3.8-flash-low}" > /data/.gemini/antigravity-cli/default-model
-    bashio::log.info "Configured local REST API daemon on port ${api_port:-8120} (default model: ${default_model:-gemini-3.8-flash-low})"
+    printf '%s' "${default_model:-gemini-4-hydrogen-low}" > /data/.gemini/antigravity-cli/default-model
+    bashio::log.info "Configured local REST API daemon on port ${api_port:-8120} (default model: ${default_model:-gemini-4-hydrogen-low})"
 else
     rm -f /data/.gemini/antigravity-cli/api-port
 fi

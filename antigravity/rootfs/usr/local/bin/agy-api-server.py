@@ -18,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger("agy-api")
 
 PORT = int(os.environ.get("AGY_API_PORT", "8120"))
-DEFAULT_MODEL = os.environ.get("AGY_DEFAULT_MODEL", "gemini-3.8-flash-low")
+DEFAULT_MODEL = os.environ.get("AGY_DEFAULT_MODEL", "gemini-4-hydrogen-low")
 DEFAULT_TIMEOUT = int(os.environ.get("AGY_DEFAULT_TIMEOUT", "120"))
 WORKSPACE = os.environ.get("AGY_WORKSPACE", "/homeassistant")
 AGY_BIN = os.environ.get("AGY_BIN") or (

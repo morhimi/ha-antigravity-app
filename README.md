@@ -42,7 +42,7 @@ Many Home Assistant users connect **Google Gemini** using a **Free-Tier Google A
 | **Privacy & Model Training** | ⚠️ **Used to train Google models & subject to human review** (not suitable for home security cameras) | ✅ **Private** (Not used to train models) | ✅ **Private** (Governed by paid/workspace subscription terms & configurable telemetry) |
 | **Cost Model** | Free (`$0`) | Metered per-token billing (can spike if a camera motion loop triggers hundreds of video analyses) | **Included in your flat-rate Google AI / Antigravity subscription** (predictable monthly cost) |
 | **Rate Limits & Reliability** | ❌ Frequent `429 Resource Exhausted` errors on video clips | ✅ High | ✅ **High** (Paid tier priority + built-in async concurrency queue) |
-| **Models Available** | Limited free-tier subset | Per-token pricing (flagship models get expensive fast for video) | **`gemini-3.8-flash-low/medium/high`**, **`gemini-4-argon-low/medium/high`**, **`claude-sonnet-5-5-*`**, **`claude-opus-5-5-*`** |
+| **Models Available** | Limited free-tier subset | Per-token pricing (flagship models get expensive fast for video) | **`gemini-4-hydrogen-low/medium/high/xhigh`**, **`gemini-3.8-flash-low/medium/high`**, **`gemini-4-argon-low/medium/high`**, **`claude-sonnet-5-5-*`**, **`claude-opus-5-5-*`** |
 | **Multimodal Media Support** | Requires custom integration or base64 upload | Requires custom integration or base64 upload | **Native `/media/...` file paths** (`.mp4` video clips, `.jpg`/`.png` snapshots, audio) |
 | **Autonomous Smart-Home Agent** | ❌ Prompt-in / Text-out only | ❌ Prompt-in / Text-out only | ✅ **Full 24/7 Agent (`agy remote-control`)** + native Home Assistant **MCP (`/api/mcp`)** & `ha` CLI |
 
@@ -74,7 +74,7 @@ rest_command:
       {
         "prompt": {{ prompt | tojson }},
         "files": {{ files | default([]) | tojson }},
-        "model": "{{ model | default('gemini-3.8-flash-low') }}",
+        "model": "{{ model | default('gemini-4-hydrogen-low') }}",
         "timeout": {{ timeout | default(120) | int }}
       }
 ```
@@ -87,7 +87,7 @@ data:
   prompt: "Describe who is at the front door in one sentence."
   files:
     - "/media/doorbell/latest_clip.mp4"
-  model: "gemini-3.8-flash-low"
+  model: "gemini-4-hydrogen-low"
 response_variable: agy_res
 ```
 

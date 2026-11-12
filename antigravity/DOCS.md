@@ -29,7 +29,7 @@ This app runs the **Google Antigravity CLI (`agy`)** inside a persistent Debian 
 | `workspace_dir` | `"/homeassistant"` | Default working directory (`/homeassistant` is also symlinked at `/config`). |
 | `api_enabled` | `true` | Run the local HTTP REST API daemon (`agy-api`) on `api_port` for Home Assistant automations. |
 | `api_port` | `8120` | Internal TCP port for the local REST API daemon. |
-| `default_model` | `"gemini-3.8-flash-low"` | Default model used by `/api/generate` when `model` is omitted in the request payload. |
+| `default_model` | `"gemini-4-hydrogen-low"` | Default model used by `/api/generate` when `model` is omitted in the request payload. |
 | `ha_mcp_enabled` | `true` | Automatically configure `~/.gemini/config/mcp_config.json` with the `home-assistant` MCP server when `ha_mcp_token` is provided. |
 | `ha_mcp_url` | `"http://homeassistant:8123/api/mcp"` | Home Assistant native MCP server endpoint. |
 | `ha_mcp_token` | *(optional)* | Long-Lived Access Token from your Home Assistant user profile for `/api/mcp`. |
@@ -56,7 +56,7 @@ rest_command:
       {
         "prompt": {{ prompt | tojson }},
         "files": {{ files | default([]) | tojson }},
-        "model": "{{ model | default('gemini-3.8-flash-low') }}",
+        "model": "{{ model | default('gemini-4-hydrogen-low') }}",
         "timeout": {{ timeout | default(120) | int }}
       }
 ```

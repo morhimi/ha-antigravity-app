@@ -73,7 +73,7 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
 
         os.environ["AGY_BIN"] = str(self.mock_agy)
         os.environ["AGY_WORKSPACE"] = str(self.temp_path)
-        os.environ["AGY_DEFAULT_MODEL"] = "gemini-3.8-flash-low"
+        os.environ["AGY_DEFAULT_MODEL"] = "gemini-4-hydrogen-low"
         os.environ["AGY_DEFAULT_TIMEOUT"] = "120"
 
         self.srv_mod = load_server_module()
@@ -114,11 +114,12 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
 
     def test_derive_effort_levels(self) -> None:
         derive = self.srv_mod._derive_effort
-        self.assertEqual(derive("gemini-3.8-flash-low", None), "low")
+        self.assertEqual(derive("gemini-4-hydrogen-low", None), "low")
+        self.assertEqual(derive("gemini-4-hydrogen-xhigh", None), "xhigh")
         self.assertEqual(derive("gemini-4-argon-high", None), "high")
         self.assertEqual(derive("gemini-4-argon-medium", None), "medium")
         self.assertEqual(derive("gemini-4-argon-max", None), "max")
-        self.assertEqual(derive("gemini-3.8-flash-low", "HIGH"), "high")
+        self.assertEqual(derive("gemini-4-hydrogen-low", "HIGH"), "high")
         self.assertEqual(derive("custom-model", None), "low")
 
     async def test_health_endpoint(self) -> None:
@@ -126,7 +127,7 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["status"], "ok")
         self.assertEqual(body["service"], "agy-api")
-        self.assertEqual(body["default_model"], "gemini-3.8-flash-low")
+        self.assertEqual(body["default_model"], "gemini-4-hydrogen-low")
         self.assertEqual(body["default_timeout"], 120)
 
     async def test_generate_json_extraction_usage_and_multimodal_directive(self) -> None:
@@ -140,11 +141,11 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(status, 200)
         self.assertEqual(body["status"], "success")
-        self.assertEqual(body["model"], "gemini-3.8-flash-low")
+        self.assertEqual(body["model"], "gemini-4-hydrogen-low")
         self.assertEqual(body["usage"], {"input_tokens": 120, "output_tokens": 45})
         inner = json.loads(body["response"])
         self.assertIn("--model", inner["args"])
-        self.assertIn("gemini-3.8-flash-low", inner["args"])
+        self.assertIn("gemini-4-hydrogen-low", inner["args"])
         self.assertIn("--effort", inner["args"])
         self.assertIn("low", inner["args"])
         self.assertIn("--dangerously-skip-permissions", inner["args"])

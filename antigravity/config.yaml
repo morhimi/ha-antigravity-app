@@ -1,6 +1,6 @@
 # https://contributors.home-assistant.io/apps/reference/configuration/
 name: Antigravity CLI
-version: "1.4.3"
+version: "1.4.4"
 slug: antigravity
 description: >-
   Google Antigravity autonomous AI agent CLI (agy) with persistent Remote
@@ -37,7 +37,7 @@ options:
   workspace_dir: "/homeassistant"
   api_enabled: true
   api_port: 8120
-  default_model: "gemini-3.8-flash-low"
+  default_model: "gemini-4-hydrogen-low"
   ha_mcp_enabled: true
   ha_mcp_url: "http://homeassistant:8123/api/mcp"
   log_level: "info"
@@ -49,7 +49,7 @@ schema:
   workspace_dir: str
   api_enabled: bool
   api_port: port
-  default_model: list(gemini-3.8-flash-low|gemini-3.8-flash-medium|gemini-3.8-flash-high|gemini-4-argon-low|gemini-4-argon-medium|gemini-4-argon-high)
+  default_model: list(gemini-4-hydrogen-low|gemini-4-hydrogen-medium|gemini-4-hydrogen-high|gemini-4-hydrogen-xhigh|gemini-3.8-flash-low|gemini-3.8-flash-medium|gemini-3.8-flash-high|gemini-4-argon-low|gemini-4-argon-medium|gemini-4-argon-high|claude-sonnet-5-5-low|claude-sonnet-5-5-medium|claude-sonnet-5-5-high|claude-opus-5-5-low|claude-opus-5-5-medium|claude-opus-5-5-high|gpt-oss-120b-medium)
   ha_mcp_enabled: bool
   ha_mcp_url: str
   ha_mcp_token: password?

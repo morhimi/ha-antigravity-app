@@ -25,7 +25,7 @@ print_banner() {
     printf "  Remote Portal : \033[1;34mhttps://antigravity.google.com/\033[0m (instance: \033[1m%s\033[0m)\n" "${instance_name}"
     if [ -f /data/.gemini/antigravity-cli/api-port ]; then
         api_port="$(cat /data/.gemini/antigravity-cli/api-port 2>/dev/null || echo '8120')"
-        default_model="$(cat /data/.gemini/antigravity-cli/default-model 2>/dev/null || echo 'gemini-3.8-flash-low')"
+        default_model="$(cat /data/.gemini/antigravity-cli/default-model 2>/dev/null || echo 'gemini-4-hydrogen-low')"
         printf "  Local REST API: \033[1;32mhttp://127.0.0.1:%s/api/generate\033[0m (model: \033[1m%s\033[0m)\n" "${api_port}" "${default_model}"
     fi
     if [ -f /data/.ssh/id_ed25519.pub ]; then
