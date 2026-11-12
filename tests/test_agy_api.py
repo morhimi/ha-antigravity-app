@@ -115,9 +115,9 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
     def test_derive_effort_levels(self) -> None:
         derive = self.srv_mod._derive_effort
         self.assertEqual(derive("gemini-3.8-flash-low", None), "low")
-        self.assertEqual(derive("gemini-3.1-pro-high", None), "high")
-        self.assertEqual(derive("gemini-3.1-pro-medium", None), "medium")
-        self.assertEqual(derive("gemini-3.1-pro-max", None), "max")
+        self.assertEqual(derive("gemini-4-argon-high", None), "high")
+        self.assertEqual(derive("gemini-4-argon-medium", None), "medium")
+        self.assertEqual(derive("gemini-4-argon-max", None), "max")
         self.assertEqual(derive("gemini-3.8-flash-low", "HIGH"), "high")
         self.assertEqual(derive("custom-model", None), "low")
 
@@ -176,11 +176,11 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
             {
                 "prompt": "Check snapshot",
                 "files": "/media/single.jpg",
-                "model": "gemini-3.1-pro-high",
+                "model": "gemini-4-argon-high",
             },
         )
         self.assertEqual(status, 200)
-        self.assertEqual(body["model"], "gemini-3.1-pro-high")
+        self.assertEqual(body["model"], "gemini-4-argon-high")
         inner = json.loads(body["response"])
         self.assertIn("high", inner["args"])
         self.assertIn("- /media/single.jpg", inner["prompt"])
