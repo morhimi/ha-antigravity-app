@@ -386,6 +386,6 @@ jobs:
             test "$(uname -m)" = "aarch64"
             /opt/antigravity/bin/agy --version
             /usr/bin/ttyd --version
-            /usr/bin/ha --version
+            /usr/bin/ha --help >/dev/null
             python3 --version
           '
