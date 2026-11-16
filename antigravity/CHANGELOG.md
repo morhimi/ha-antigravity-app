@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.3
+
+- Added `gemini-pro-orchestrator-g1-pro` to the `default_model` dropdown in `config.yaml` and updated the model catalog in `README.md`.
+
 ## 1.5.2
 
 - Persisted `/root/.local` (`/data/.local`) and `/root/workspace` (`/data/workspace`) across container rebuilds and App upgrades, and documented workspace persistence boundaries in `DOCS.md`.
