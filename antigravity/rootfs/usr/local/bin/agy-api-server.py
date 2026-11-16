@@ -107,9 +107,9 @@ def _parse_cli_json_output(raw_stdout: str, expect_structured: bool = False) -> 
                 usage = parsed.get("usage")
                 usage_data = usage if isinstance(usage, dict) else {}
                 extra: dict = {}
-                if "conversation_id" in parsed and parsed["conversation_id"]:
+                if parsed.get("conversation_id"):
                     extra["conversation_id"] = str(parsed["conversation_id"])
-                if "structured_output" in parsed and parsed["structured_output"] is not None:
+                if parsed.get("structured_output") is not None:
                     extra["structured"] = parsed["structured_output"]
                 elif expect_structured and response_text:
                     try:
@@ -253,7 +253,7 @@ async def _run_async_and_emit(
             conversation_id=conversation_id,
         )
         event_payload = {**result, "request_id": request_id}
-    except Exception as err:  # noqa: BLE001
+    except (RuntimeError, TimeoutError, OSError, ValueError) as err:
         logger.exception("Async inference '%s' failed", request_id)
         event_payload = {
             "status": "error",
