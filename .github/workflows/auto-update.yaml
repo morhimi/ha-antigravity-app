@@ -102,7 +102,13 @@ jobs:
           done
 
           pr_title="chore(deps): auto-update upstream dependencies (v${new_ver})"
-          pr_body="$(printf 'Automated upstream dependency update detected by scheduled workflow:\n\n%s\n---\n*Automated update created by [Auto-Update Upstream Dependencies](https://github.com/%s/actions/workflows/auto-update.yaml)*\n' "${updates_text}" "${{ github.repository }}")"
+          wf_url="https://github.com/${{ github.repository }}/actions/workflows/auto-update.yaml"
+          pr_body="$(
+            printf 'Automated upstream dependency update detected by scheduled workflow:\n\n%s\n' \
+              "${updates_text}"
+            printf -- '---\n*Automated update created by [Auto-Update Upstream Dependencies](%s)*\n' \
+              "${wf_url}"
+          )"
 
           existing_pr="$(gh pr list --head "${branch_name}" --state open --json number --jq '.[0].number // empty')"
           if [[ -z "${existing_pr}" ]]; then

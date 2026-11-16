@@ -20,6 +20,7 @@ fi
 
 api_port="$(bashio::config 'api_port')"
 default_model="$(bashio::config 'default_model')"
+default_timeout="$(bashio::config 'default_timeout')"
 workspace_dir="$(bashio::config 'workspace_dir')"
 
 if [ -z "${api_port}" ] || [ "${api_port}" = "null" ]; then
@@ -27,6 +28,9 @@ if [ -z "${api_port}" ] || [ "${api_port}" = "null" ]; then
 fi
 if [ -z "${default_model}" ] || [ "${default_model}" = "null" ]; then
     default_model="gemini-4-hydrogen-low"
+fi
+if [ -z "${default_timeout}" ] || [ "${default_timeout}" = "null" ]; then
+    default_timeout="120"
 fi
 if [ -z "${workspace_dir}" ] || [ "${workspace_dir}" = "null" ]; then
     workspace_dir="/homeassistant"
@@ -37,9 +41,10 @@ cd "${workspace_dir}" || exit 1
 
 export AGY_API_PORT="${api_port}"
 export AGY_DEFAULT_MODEL="${default_model}"
+export AGY_DEFAULT_TIMEOUT="${default_timeout}"
 export AGY_WORKSPACE="${workspace_dir}"
 
 agy_version="$(/usr/local/bin/agy --version 2>/dev/null || echo 'unknown')"
-bashio::log.info "Starting Antigravity REST API bridge on port ${AGY_API_PORT} (model: ${AGY_DEFAULT_MODEL}, agy v${agy_version})..."
+bashio::log.info "Starting Antigravity REST API bridge on port ${AGY_API_PORT} (model: ${AGY_DEFAULT_MODEL}, timeout: ${AGY_DEFAULT_TIMEOUT}s, agy v${agy_version})..."
 
 exec python3 /usr/local/bin/agy-api-server.py

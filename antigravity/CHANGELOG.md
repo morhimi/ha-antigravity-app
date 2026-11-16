@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.6
+
+- Exposed `default_timeout` (`10–600` seconds, default `120`) in App configuration (`config.yaml` / `translations/en.yaml`) and wired `AGY_DEFAULT_TIMEOUT` in `services.d/agy-api/run`.
+- Hardened `agy-api-server.py` HTTP request parsing with read timeouts (`408`), payload size limits (`413`), strict `Content-Length` / incomplete-body validation (`400`), and automatic `--add-dir /media` when analyzing media files.
+- Updated `10-init-antigravity.sh` to upgrade `/data/bin/agy` from a newer image-baked binary even when `auto_update_cli: false`, and to remove the managed `home-assistant` MCP entry when `ha_mcp_enabled: false`.
+
 ## 1.4.5
 
 - Updated Home Assistant CLI (`ha`) from `5.6.0` to `6.0.0`.

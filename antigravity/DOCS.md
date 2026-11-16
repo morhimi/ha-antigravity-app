@@ -30,6 +30,7 @@ This app runs the **Google Antigravity CLI (`agy`)** inside a persistent Debian 
 | `api_enabled` | `true` | Run the local HTTP REST API daemon (`agy-api`) on `api_port` for Home Assistant automations. |
 | `api_port` | `8120` | Internal TCP port for the local REST API daemon. |
 | `default_model` | `"gemini-4-hydrogen-low"` | Default model used by `/api/generate` when `model` is omitted in the request payload. |
+| `default_timeout` | `120` | Default timeout (10–600 seconds) for `/api/generate` when `timeout` is omitted in the request payload. |
 | `ha_mcp_enabled` | `true` | Automatically configure `~/.gemini/config/mcp_config.json` with the `home-assistant` MCP server when `ha_mcp_token` is provided. |
 | `ha_mcp_url` | `"http://homeassistant:8123/api/mcp"` | Home Assistant native MCP server endpoint. |
 | `ha_mcp_token` | *(optional)* | Long-Lived Access Token from your Home Assistant user profile for `/api/mcp`. |

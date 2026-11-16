@@ -31,6 +31,8 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.temp_path = Path(self.temp_dir.name)
+        self.media_dir = self.temp_path / "media"
+        self.media_dir.mkdir()
         self.mock_agy = self.temp_path / "mock-agy"
 
         # Create a mock agy CLI script that returns --output-format json structure
@@ -73,8 +75,11 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
 
         os.environ["AGY_BIN"] = str(self.mock_agy)
         os.environ["AGY_WORKSPACE"] = str(self.temp_path)
+        os.environ["AGY_MEDIA_DIR"] = str(self.media_dir)
         os.environ["AGY_DEFAULT_MODEL"] = "gemini-4-hydrogen-low"
-        os.environ["AGY_DEFAULT_TIMEOUT"] = "120"
+        os.environ["AGY_DEFAULT_TIMEOUT"] = "180"
+        os.environ["AGY_MAX_BODY_BYTES"] = "2048"
+        os.environ["AGY_HTTP_READ_TIMEOUT"] = "1.0"
 
         self.srv_mod = load_server_module()
         self.handler = self.srv_mod.AgyApiServer()
@@ -112,6 +117,19 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
 
         return await asyncio.to_thread(_sync_req)
 
+    async def _raw_http(self, raw_bytes: bytes, close_writer_early: bool = True) -> tuple[int, dict]:
+        reader, writer = await asyncio.open_connection("127.0.0.1", self.port)
+        writer.write(raw_bytes)
+        await writer.drain()
+        if close_writer_early and writer.can_write_eof():
+            writer.write_eof()
+        response_bytes = await reader.read()
+        writer.close()
+        await writer.wait_closed()
+        header_part, body_part = response_bytes.split(b"\r\n\r\n", 1)
+        status_code = int(header_part.splitlines()[0].split()[1])
+        return status_code, json.loads(body_part.decode("utf-8"))
+
     def test_derive_effort_levels(self) -> None:
         derive = self.srv_mod._derive_effort
         self.assertEqual(derive("gemini-4-hydrogen-low", None), "low")
@@ -122,13 +140,13 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(derive("gemini-4-hydrogen-low", "HIGH"), "high")
         self.assertEqual(derive("custom-model", None), "low")
 
-    async def test_health_endpoint(self) -> None:
+    async def test_health_endpoint_reflects_env_overrides(self) -> None:
         status, body = await self._request("GET", "/health")
         self.assertEqual(status, 200)
         self.assertEqual(body["status"], "ok")
         self.assertEqual(body["service"], "agy-api")
         self.assertEqual(body["default_model"], "gemini-4-hydrogen-low")
-        self.assertEqual(body["default_timeout"], 120)
+        self.assertEqual(body["default_timeout"], 180)
 
     async def test_generate_json_extraction_usage_and_multimodal_directive(self) -> None:
         status, body = await self._request(
@@ -151,12 +169,14 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertIn("--dangerously-skip-permissions", inner["args"])
         self.assertIn("--output-format", inner["args"])
         self.assertIn("json", inner["args"])
+        self.assertIn("--add-dir", inner["args"])
+        self.assertIn(str(self.media_dir), inner["args"])
         self.assertIn("- /media/clip1.mp4", inner["prompt"])
         self.assertIn("- /media/clip2.jpg", inner["prompt"])
         self.assertIn("Analyze the attached media files directly using native multimodal vision", inner["prompt"])
         self.assertIn("Describe doorbell clip", inner["prompt"])
 
-    async def test_text_only_prompt_omits_multimodal_directive(self) -> None:
+    async def test_text_only_prompt_omits_multimodal_directive_and_add_dir(self) -> None:
         status, body = await self._request(
             "POST",
             "/api/generate",
@@ -169,8 +189,9 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         inner = json.loads(body["response"])
         self.assertEqual(inner["prompt"], "Summarize current energy usage")
         self.assertNotIn("Attached media files", inner["prompt"])
+        self.assertNotIn("--add-dir", inner["args"])
 
-    async def test_vision_alias_and_string_file_fallback(self) -> None:
+    async def test_vision_alias_explicit_effort_and_string_file_fallback(self) -> None:
         status, body = await self._request(
             "POST",
             "/api/v1/vision",
@@ -178,12 +199,13 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
                 "prompt": "Check snapshot",
                 "files": "/media/single.jpg",
                 "model": "gemini-4-argon-high",
+                "effort": "xhigh",
             },
         )
         self.assertEqual(status, 200)
         self.assertEqual(body["model"], "gemini-4-argon-high")
         inner = json.loads(body["response"])
-        self.assertIn("high", inner["args"])
+        self.assertIn("xhigh", inner["args"])
         self.assertIn("- /media/single.jpg", inner["prompt"])
 
     async def test_prefix_banner_noise_before_json_is_stripped(self) -> None:
@@ -222,8 +244,46 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Invalid 'timeout'", body["message"])
 
         status2, body2 = await self._request("POST", "/api/generate", {"prompt": "Hello", "timeout": -10})
-        self.assertEqual(status2, 400)
+        self.assertEqual(status, 400)
         self.assertIn("Invalid 'timeout'", body2["message"])
+
+    async def test_http_content_length_and_timeout_guards(self) -> None:
+        # Non-numeric Content-Length -> 400
+        status, body = await self._raw_http(
+            b"POST /api/generate HTTP/1.1\r\nHost: localhost\r\nContent-Length: nope\r\n\r\n"
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("Invalid Content-Length", body["message"])
+
+        # Negative Content-Length -> 400
+        status, body = await self._raw_http(
+            b"POST /api/generate HTTP/1.1\r\nHost: localhost\r\nContent-Length: -5\r\n\r\n"
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("Negative Content-Length", body["message"])
+
+        # Oversized Content-Length -> 413
+        status, body = await self._raw_http(
+            b"POST /api/generate HTTP/1.1\r\nHost: localhost\r\nContent-Length: 99999\r\n\r\n"
+        )
+        self.assertEqual(status, 413)
+        self.assertIn("exceeds maximum allowed size", body["message"])
+
+        # Incomplete body -> 400
+        status, body = await self._raw_http(
+            b"POST /api/generate HTTP/1.1\r\nHost: localhost\r\nContent-Length: 50\r\n\r\n{\"prompt\":\"hi\"",
+            close_writer_early=True,
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("Incomplete request body", body["message"])
+
+        # Stalled header read -> 408
+        status, body = await self._raw_http(
+            b"POST /api/generate HTTP/1.1\r\nHost: localhost\r\n",
+            close_writer_early=False,
+        )
+        self.assertEqual(status, 408)
+        self.assertIn("Timed out reading", body["message"])
 
     async def test_missing_prompt_returns_400(self) -> None:
         status, body = await self._request("POST", "/api/generate", {"prompt": "   "})

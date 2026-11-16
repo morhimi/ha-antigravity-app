@@ -21,12 +21,24 @@ PORT = int(os.environ.get("AGY_API_PORT", "8120"))
 DEFAULT_MODEL = os.environ.get("AGY_DEFAULT_MODEL", "gemini-4-hydrogen-low")
 DEFAULT_TIMEOUT = int(os.environ.get("AGY_DEFAULT_TIMEOUT", "120"))
 WORKSPACE = os.environ.get("AGY_WORKSPACE", "/homeassistant")
+MEDIA_DIR = os.environ.get("AGY_MEDIA_DIR", "/media")
+MAX_BODY_BYTES = int(os.environ.get("AGY_MAX_BODY_BYTES", str(1024 * 1024)))
+HTTP_READ_TIMEOUT = float(os.environ.get("AGY_HTTP_READ_TIMEOUT", "10"))
 AGY_BIN = os.environ.get("AGY_BIN") or (
     "/data/bin/agy" if os.path.exists("/data/bin/agy") else (shutil.which("agy") or "/usr/local/bin/agy")
 )
 
 # Limit concurrent heavy LLM tasks to avoid starving container resources
 SEMAPHORE = asyncio.Semaphore(2)
+
+
+class HttpClientError(Exception):
+    """Exception mapped directly to a specific HTTP 4xx response."""
+
+    def __init__(self, status_line: str, message: str) -> None:
+        super().__init__(message)
+        self.status_line = status_line
+        self.message = message
 
 
 def _derive_effort(model: str, explicit_effort: str | None) -> str:
@@ -92,9 +104,10 @@ async def run_agy_inference(
         "--dangerously-skip-permissions",
         "--output-format",
         "json",
-        "-p",
-        full_prompt,
     ]
+    if clean_files and MEDIA_DIR and os.path.isdir(MEDIA_DIR):
+        cmd.extend(["--add-dir", MEDIA_DIR])
+    cmd.extend(["-p", full_prompt])
 
     env = os.environ.copy()
     env["HOME"] = "/root"
@@ -149,6 +162,61 @@ async def _send_json(writer: asyncio.StreamWriter, status_line: str, payload: di
     await writer.drain()
 
 
+async def _read_http_request(reader: asyncio.StreamReader) -> tuple[str, str, bytes] | None:
+    try:
+        line = await asyncio.wait_for(reader.readline(), timeout=HTTP_READ_TIMEOUT)
+    except asyncio.TimeoutError as err:
+        raise HttpClientError("408 Request Timeout", "Timed out reading HTTP request line") from err
+
+    if not line:
+        return None
+
+    parts = line.decode("utf-8", errors="replace").strip().split()
+    if len(parts) < 2:
+        return None
+    method, raw_path = parts[0].upper(), parts[1]
+    path = raw_path.split("?", 1)[0]
+
+    headers: dict[str, str] = {}
+    while True:
+        try:
+            header_line = await asyncio.wait_for(reader.readline(), timeout=HTTP_READ_TIMEOUT)
+        except asyncio.TimeoutError as err:
+            raise HttpClientError("408 Request Timeout", "Timed out reading HTTP headers") from err
+        if header_line in (b"\r\n", b"\n", b""):
+            break
+        decoded = header_line.decode("utf-8", errors="replace")
+        if ":" in decoded:
+            key, val = decoded.split(":", 1)
+            headers[key.strip().lower()] = val.strip()
+
+    raw_length = headers.get("content-length", "0").strip()
+    try:
+        content_length = int(raw_length)
+    except ValueError as err:
+        raise HttpClientError("400 Bad Request", f"Invalid Content-Length header: {raw_length!r}") from err
+
+    if content_length < 0:
+        raise HttpClientError("400 Bad Request", "Negative Content-Length is not allowed")
+    if content_length > MAX_BODY_BYTES:
+        raise HttpClientError(
+            "413 Payload Too Large",
+            f"Request body exceeds maximum allowed size of {MAX_BODY_BYTES} bytes",
+        )
+
+    if content_length == 0:
+        return method, path, b"{}"
+
+    try:
+        body = await asyncio.wait_for(reader.readexactly(content_length), timeout=HTTP_READ_TIMEOUT)
+    except asyncio.TimeoutError as err:
+        raise HttpClientError("408 Request Timeout", "Timed out reading request body") from err
+    except asyncio.IncompleteReadError as err:
+        raise HttpClientError("400 Bad Request", "Incomplete request body received") from err
+
+    return method, path, body
+
+
 class AgyApiServer:
     async def handle_client(
         self,
@@ -156,28 +224,10 @@ class AgyApiServer:
         writer: asyncio.StreamWriter,
     ) -> None:
         try:
-            line = await reader.readline()
-            if not line:
+            parsed_req = await _read_http_request(reader)
+            if parsed_req is None:
                 return
-
-            parts = line.decode("utf-8", errors="replace").strip().split()
-            if len(parts) < 2:
-                return
-            method, raw_path = parts[0].upper(), parts[1]
-            path = raw_path.split("?", 1)[0]
-
-            headers: dict[str, str] = {}
-            while True:
-                header_line = await reader.readline()
-                if header_line in (b"\r\n", b"\n", b""):
-                    break
-                decoded = header_line.decode("utf-8", errors="replace")
-                if ":" in decoded:
-                    key, val = decoded.split(":", 1)
-                    headers[key.strip().lower()] = val.strip()
-
-            content_length = int(headers.get("content-length", "0"))
-            body = await reader.readexactly(content_length) if content_length > 0 else b"{}"
+            method, path, body = parsed_req
 
             # Route: Healthcheck
             if path == "/health" and method == "GET":
@@ -256,6 +306,13 @@ class AgyApiServer:
                 writer,
                 "404 Not Found",
                 {"status": "error", "message": f"Path '{path}' not found"},
+            )
+        except HttpClientError as err:
+            logger.warning("Client error (%s): %s", err.status_line, err.message)
+            await _send_json(
+                writer,
+                err.status_line,
+                {"status": "error", "message": err.message},
             )
         except TimeoutError as err:
             logger.error("Request timed out: %s", err)

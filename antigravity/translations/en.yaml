@@ -41,6 +41,11 @@ configuration:
     description: >-
       Default model used by the REST API daemon when a request does not
       specify a model explicitly (defaults to gemini-4-hydrogen-low).
+  default_timeout:
+    name: Default REST API Timeout (seconds)
+    description: >-
+      Default timeout in seconds for REST API inference requests when
+      timeout is omitted in the payload (10–600, defaults to 120).
   ha_mcp_enabled:
     name: Configure Home Assistant MCP Server
     description: >-

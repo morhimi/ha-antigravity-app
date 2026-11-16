@@ -59,11 +59,19 @@ if [ -d /homeassistant ] && [ ! -e /config ]; then
     ln -sfn /homeassistant /config
 fi
 
-# 4. Provision /data/bin/agy and optionally update from upstream
+# 4. Provision /data/bin/agy and upgrade from baked-in binary if newer
 if [ ! -x /data/bin/agy ]; then
     bashio::log.info "Copying baked-in Antigravity CLI binary to /data/bin/agy..."
     cp -f /opt/antigravity/bin/agy /data/bin/agy
     chmod +x /data/bin/agy
+elif [ -x /opt/antigravity/bin/agy ]; then
+    data_ver="$(/data/bin/agy --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+    baked_ver="$(/opt/antigravity/bin/agy --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+    if [ -n "${baked_ver}" ] && [ -n "${data_ver}" ] && dpkg --compare-versions "${baked_ver}" gt "${data_ver}"; then
+        bashio::log.info "Upgrading /data/bin/agy from v${data_ver} to baked-in v${baked_ver}..."
+        cp -f /opt/antigravity/bin/agy /data/bin/agy
+        chmod +x /data/bin/agy
+    fi
 fi
 
 if bashio::config.true 'auto_update_cli'; then
@@ -103,9 +111,10 @@ bashio::log.info "Configured Antigravity working/permission mode: ${permission_m
 if bashio::config.true 'api_enabled'; then
     api_port="$(bashio::config 'api_port')"
     default_model="$(bashio::config 'default_model')"
+    default_timeout="$(bashio::config 'default_timeout')"
     printf '%s' "${api_port:-8120}" > /data/.gemini/antigravity-cli/api-port
     printf '%s' "${default_model:-gemini-4-hydrogen-low}" > /data/.gemini/antigravity-cli/default-model
-    bashio::log.info "Configured local REST API daemon on port ${api_port:-8120} (default model: ${default_model:-gemini-4-hydrogen-low})"
+    bashio::log.info "Configured local REST API daemon on port ${api_port:-8120} (default model: ${default_model:-gemini-4-hydrogen-low}, timeout: ${default_timeout:-120}s)"
 else
     rm -f /data/.gemini/antigravity-cli/api-port
 fi
@@ -167,7 +176,7 @@ if bashio::config.has_value 'gemini_api_key'; then
     bashio::log.info "Configured GEMINI_API_KEY in container environment."
 fi
 
-# 7. Auto-configure Home Assistant native MCP server in ~/.gemini/config/mcp_config.json
+# 8. Auto-configure Home Assistant native MCP server in ~/.gemini/config/mcp_config.json
 mcp_file="/data/.gemini/config/mcp_config.json"
 if [ ! -f "${mcp_file}" ]; then
     echo '{"mcpServers":{}}' > "${mcp_file}"
@@ -194,9 +203,18 @@ if bashio::config.true 'ha_mcp_enabled' && bashio::config.has_value 'ha_mcp_toke
         rm -f "${tmp_mcp}"
         bashio::log.warning "Failed to update ${mcp_file}; preserving existing file."
     fi
+elif ! bashio::config.true 'ha_mcp_enabled'; then
+    tmp_mcp="$(mktemp)"
+    if jq 'del(.mcpServers["home-assistant"])' "${mcp_file}" > "${tmp_mcp}"; then
+        mv "${tmp_mcp}" "${mcp_file}"
+        chmod 600 "${mcp_file}"
+        bashio::log.info "Removed disabled Home Assistant MCP server entry from ${mcp_file}."
+    else
+        rm -f "${tmp_mcp}"
+    fi
 fi
 
-# 8. Create persistent tmux configuration if not present
+# 9. Create persistent tmux configuration if not present
 if [ ! -f /data/.tmux.conf ]; then
     cat << 'EOF' > /data/.tmux.conf
 set -g default-terminal "xterm-256color"
@@ -213,7 +231,7 @@ EOF
 fi
 ln -sfn /data/.tmux.conf /root/.tmux.conf
 
-# 9. Configure interactive shell environment
+# 10. Configure interactive shell environment
 cat << 'EOF' > /etc/profile.d/antigravity.sh
 export HOME="/root"
 export SHELL="/bin/bash"
