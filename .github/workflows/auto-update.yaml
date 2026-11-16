@@ -23,11 +23,13 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
+          token: ${{ secrets.AUTO_UPDATE_TOKEN || github.token }}
 
       - name: Check for upstream updates and open PR
         id: check
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AUTO_UPDATE_TOKEN || github.token }}
+          AUTO_UPDATE_HAS_PAT: ${{ secrets.AUTO_UPDATE_TOKEN != '' }}
         run: |
           set -euo pipefail
           dockerfile="antigravity/Dockerfile"
@@ -114,7 +116,9 @@ jobs:
               --body "${pr_body}"
           fi
 
-          # GITHUB_TOKEN PRs do not trigger on:pull_request workflows by GitHub design,
-          # so dispatch Lint and dry-run Builder directly on the PR branch.
-          gh workflow run lint.yaml --ref "${branch_name}"
-          gh workflow run builder.yaml --ref "${branch_name}"
+          # Fallback when running without AUTO_UPDATE_TOKEN: GITHUB_TOKEN PRs do not trigger
+          # on:pull_request workflows by GitHub design, so dispatch them explicitly.
+          if [[ "${AUTO_UPDATE_HAS_PAT:-false}" != "true" ]]; then
+            gh workflow run lint.yaml --ref "${branch_name}"
+            gh workflow run builder.yaml --ref "${branch_name}"
+          fi
