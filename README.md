@@ -16,10 +16,10 @@ Run **Google Antigravity CLI (`agy`)** and **Google Gemini (Pro / Flash)** 24/7 
 
 ## Key Features & Capabilities
 
-### [Antigravity CLI (`antigravity`)](./antigravity)
+### [Google Antigravity (Gemini AI) (`antigravity`)](./antigravity)
 
 - **Local Gemini Multimodal REST API Bridge (`:8120/api/generate`)**:
-  Trigger **Google Gemini** directly from Home Assistant automations (`rest_command` with `response_variable`) using your existing Google Antigravity / Google AI subscription — **no free-tier AI Studio `429` rate limits**. Supports native multimodal analysis of `/media/...` security camera snapshots, doorbell `.mp4` video clips, and audio files.
+  Trigger **Google Gemini** directly from Home Assistant automations (`rest_command` with `response_variable`) using your existing Google Antigravity / Google AI subscription — **no free-tier AI Studio `429` rate limits**. Supports native multimodal analysis of `/media/...` security camera snapshots, doorbell `.mp4` video clips, and audio files, plus structured JSON outputs (`json_schema`), conversation continuity (`conversation_id`), and non-blocking `202 Accepted` event callbacks.
 - **24/7 Remote Control Daemon (`agy remote-control`)**:
   Supervised by `s6-overlay` so you can start, monitor, and control autonomous coding and smart-home management sessions from any browser at [antigravity.google.com](https://antigravity.google.com/) or the mobile app (iOS / Android) without keeping your laptop awake.
 - **Native Home Assistant MCP Server Integration (`/api/mcp`)**:
@@ -27,7 +27,7 @@ Run **Google Antigravity CLI (`agy`)** and **Google Gemini (Pro / Flash)** 24/7 
 - **Home Assistant Ingress Web Terminal (`ttyd`)**:
   One-click interactive terminal inside the Home Assistant sidebar (`Antigravity`) for initial Google Account OAuth sign-in and interactive `agy` CLI sessions.
 - **Full Persistence Across Updates & Reboots (`/data`)**:
-  Google OAuth tokens, conversation transcripts, skills, rules, plugins, SSH keys (`/data/.ssh/id_ed25519`), and in-place CLI self-updates persist across container restarts and App upgrades.
+  Google OAuth tokens, conversation transcripts, skills, rules, plugins, SSH keys (`/data/.ssh/id_ed25519`), user tools (`/data/.local`), workspace files (`/data/workspace`), and in-place CLI self-updates persist across container restarts and App upgrades.
 - **Pre-Installed Smart-Home & Developer Tooling**:
   Built on Debian 13 (`trixie`) for `amd64` and `aarch64` (`ghcr.io/morhimi/app-antigravity`) with the official `ha` CLI, `git`, `python3`, `ripgrep`, `jq`, `curl`, and `openssh-client`.
 
@@ -71,12 +71,19 @@ rest_command:
     content_type: "application/json"
     timeout: 120
     payload: >-
-      {
-        "prompt": {{ prompt | tojson }},
-        "files": {{ files | default([]) | tojson }},
-        "model": "{{ model | default('gemini-4-hydrogen-low') }}",
-        "timeout": {{ timeout | default(120) | int }}
-      }
+      {{
+        {
+          "prompt": prompt,
+          "files": files | default([]),
+          "model": model | default('gemini-4-hydrogen-low'),
+          "timeout": (timeout | default(120) | int)
+        }
+        | combine({"json_schema": json_schema} if json_schema is defined else {})
+        | combine({"conversation_id": conversation_id} if conversation_id is defined else {})
+        | combine({"async": (async | bool)} if async is defined else {})
+        | combine({"event_type": event_type} if event_type is defined else {})
+        | tojson
+      }}
 ```
 
 Then invoke it in any automation or script with `response_variable`:
@@ -108,7 +115,7 @@ After adding the `rest_command` above, import the ready-to-use camera/doorbell n
    ```text
    https://github.com/morhimi/ha-antigravity-app
    ```
-2. Find **Antigravity CLI** in the App Store and click **Install**.
+2. Find **Google Antigravity (Gemini AI)** in the App Store and click **Install**.
 3. Toggle **Start on boot**, **Watchdog**, and **Show in sidebar**, then click **Start**.
 4. Click **Open Web UI** (or **Antigravity** in the sidebar) to complete the one-time Google Account sign-in. Once signed in, both the `agy remote-control` daemon and the `agy-api` REST server on port `8120` run automatically.
 

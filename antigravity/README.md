@@ -1,16 +1,16 @@
-# Home Assistant App: Antigravity CLI
+# Home Assistant App: Google Antigravity (Gemini AI)
 
 [![GitHub Release](https://img.shields.io/github/v/release/morhimi/ha-antigravity-app?label=version&logo=github)](https://github.com/morhimi/ha-antigravity-app/releases)
 [![Supports amd64 Architecture](https://img.shields.io/badge/amd64-yes-green.svg)](#)
 [![Supports aarch64 Architecture](https://img.shields.io/badge/aarch64-yes-green.svg)](#)
 [![Lint, Security & Smoke Test](https://github.com/morhimi/ha-antigravity-app/actions/workflows/lint.yaml/badge.svg)](https://github.com/morhimi/ha-antigravity-app/actions/workflows/lint.yaml)
 
-Run the **Google Antigravity CLI (`agy`)** 24/7 on your Home Assistant server with native **Remote Control** and an integrated **Home Assistant Ingress Web Terminal**.
+Run the **Google Antigravity CLI (`agy`)** 24/7 on your Home Assistant server with native **Remote Control**, a **local Gemini REST API**, and an integrated **Home Assistant Ingress Web Terminal**.
 
 ## Features
 
 - **24/7 Remote Control Daemon**: Runs `agy remote-control` supervised by `s6-overlay` so you can start, inspect, and control agent sessions from any web browser ([antigravity.google.com](https://antigravity.google.com/)) or the mobile app—without keeping your laptop awake.
-- **Local REST API for Automations (`agy-api`)**: Built-in async HTTP bridge on port `8120` (`POST /api/generate`) allowing Home Assistant automations (`rest_command`) to run text and multimodal vision prompts (snapshots/video clips in `/media`) against your Antigravity subscription (`gemini-4-hydrogen-low`).
+- **Local REST API for Automations (`agy-api`)**: Built-in async HTTP bridge on port `8120` (`POST /api/generate` and `GET /health`) allowing Home Assistant automations (`rest_command`) to run text and multimodal vision prompts (`/media` snapshots & `.mp4` video clips) against your Antigravity subscription (`gemini-4-hydrogen-low`), with support for structured JSON schemas (`json_schema`), `conversation_id`, and non-blocking `202 Accepted` event callbacks.
 - **Sidebar Web Terminal (Ingress)**: Includes `ttyd` integrated directly into the Home Assistant UI for easy first-time Google Account sign-in and interactive terminal sessions.
-- **Persistent State & Self-Updates**: All credentials, conversations, skills, rules, plugins, SSH keys, and CLI binaries are persisted in `/data` across app updates and host reboots.
+- **Persistent State & Self-Updates**: Credentials, conversations, skills, rules, plugins, SSH keys, `~/.local`, `~/workspace`, and CLI binaries are persisted in `/data` across app updates and host reboots.
 - **Home Assistant Native Tooling**: Built on Debian 13 (`trixie`) with the official `ha` CLI (`ha core check`, `ha core restart`, `ha core logs`), `git`, `python3`, `ripgrep`, `jq`, and automatic configuration for Home Assistant's `/api/mcp` Model Context Protocol server.

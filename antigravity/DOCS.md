@@ -1,4 +1,4 @@
-# Home Assistant App: Antigravity CLI Documentation
+# Home Assistant App: Google Antigravity (Gemini AI)
 
 This app runs the **Google Antigravity CLI (`agy`)** inside a persistent Debian 13 (`trixie` / `glibc`) environment supervised by Home Assistant.
 
@@ -6,7 +6,7 @@ This app runs the **Google Antigravity CLI (`agy`)** inside a persistent Debian 
 
 ## First-Time Setup & Authentication
 
-1. Install and **Start** the **Antigravity CLI** app.
+1. Install and **Start** the **Google Antigravity (Gemini AI)** app.
 2. Click **Open Web UI** (or select **Antigravity** from your Home Assistant sidebar).
 3. On first launch, the Ingress web terminal prompts for one-time Google Account authentication:
    - Click the displayed Google authentication URL.
@@ -25,13 +25,13 @@ This app runs the **Google Antigravity CLI (`agy`)** inside a persistent Debian 
 | `instance_name` | `"home-assistant"` | Machine name displayed in Antigravity Remote Control. |
 | `permission_mode` | `"turbo"` | Default working/permission mode (`turbo`, `auto`, `default`, `request_review`) applied to both Remote Control (`config.json`) and interactive CLI (`settings.json`). |
 | `remote_control` | `true` | Keep the `agy remote-control` daemon running in the background. |
-| `auto_update_cli` | `true` | Automatically update the `/data/bin/agy` binary to the latest upstream release on app startup. |
+| `auto_update_cli` | `true` | Automatically update the `/data/bin/agy` binary from upstream on startup and every 24h. Even when `false`, `/data/bin/agy` still upgrades if a newer binary is baked into a new App image. |
 | `workspace_dir` | `"/homeassistant"` | Default working directory (`/homeassistant` is also symlinked at `/config`). |
 | `api_enabled` | `true` | Run the local HTTP REST API daemon (`agy-api`) on `api_port` for Home Assistant automations. |
 | `api_port` | `8120` | Internal TCP port for the local REST API daemon. |
 | `default_model` | `"gemini-4-hydrogen-low"` | Default model used by `/api/generate` when `model` is omitted in the request payload. |
 | `default_timeout` | `120` | Default timeout (10–600 seconds) for `/api/generate` when `timeout` is omitted in the request payload. |
-| `ha_mcp_enabled` | `true` | Automatically configure `~/.gemini/config/mcp_config.json` with the `home-assistant` MCP server when `ha_mcp_token` is provided. |
+| `ha_mcp_enabled` | `true` | Automatically configure `~/.gemini/config/mcp_config.json` with the `home-assistant` MCP server when `ha_mcp_token` is provided (and remove it when `false`). |
 | `ha_mcp_url` | `"http://homeassistant:8123/api/mcp"` | Home Assistant native MCP server endpoint. |
 | `ha_mcp_token` | *(optional)* | Long-Lived Access Token from your Home Assistant user profile for `/api/mcp`. |
 | `ssh_private_key` | *(optional)* | SSH private key for connecting to external hosts (e.g., OpenWrt APs). Accepts a file path (`/ssl/id_ed25519`), a Base64-encoded key (`base64 < ~/.ssh/id_ed25519 \| tr -d '\n'`), or a raw OpenSSH private key. If left blank, a persistent Ed25519 keypair is generated in `/data/.ssh/id_ed25519` and its public key is printed in the App startup log and Web UI banner. |
@@ -42,34 +42,54 @@ This app runs the **Google Antigravity CLI (`agy`)** inside a persistent Debian 
 
 ## Local REST API for Automations (`agy-api`)
 
-When `api_enabled: true`, the app runs a lightweight async HTTP REST daemon on port `8120` (`POST /api/generate` and `GET /health`) so Home Assistant automations can invoke `agy -p` with prompts and media files (`/media/...`).
+When `api_enabled: true`, the app runs a lightweight async HTTP REST daemon on port `8120` (`POST /api/generate` and `GET /health`) so Home Assistant automations can invoke `agy --output-format json` with prompts, multimodal media files (`/media/...`), structured JSON schemas, conversation continuity, and async event callbacks.
 
 Example `configuration.yaml` setup:
 
 ```yaml
 rest_command:
-  antigravity_vision:
+  antigravity_generate:
     url: "http://68eea963-antigravity:8120/api/generate"
     method: POST
     content_type: "application/json"
     timeout: 120
     payload: >-
-      {
-        "prompt": {{ prompt | tojson }},
-        "files": {{ files | default([]) | tojson }},
-        "model": "{{ model | default('gemini-4-hydrogen-low') }}",
-        "timeout": {{ timeout | default(120) | int }}
-      }
+      {{
+        {
+          "prompt": prompt,
+          "files": files | default([]),
+          "model": model | default('gemini-4-hydrogen-low'),
+          "timeout": (timeout | default(120) | int)
+        }
+        | combine({"effort": effort} if effort is defined else {})
+        | combine({"json_schema": json_schema} if json_schema is defined else {})
+        | combine({"conversation_id": conversation_id} if conversation_id is defined else {})
+        | combine({"async": (async | bool)} if async is defined else {})
+        | combine({"event_type": event_type} if event_type is defined else {})
+        | combine({"request_id": request_id} if request_id is defined else {})
+        | combine({"metadata": metadata} if metadata is defined else {})
+        | tojson
+      }}
 ```
 
-The JSON response (`{"status": "success", "response": "...", "model": "...", "duration_seconds": ..., "conversation_id": "..."}`) is returned in `response_variable['content']['response']`.
+The clean model response is returned in `response_variable['content']['response']` alongside `model`, `duration_seconds`, `conversation_id`, and `usage`.
 
 ### Advanced REST API Features
 
 - **Structured JSON Outputs (`json_schema`)**: Pass `"json_schema": {"type": "object", "properties": {"person_detected": {"type": "boolean"}}, "required": ["person_detected"]}` in the payload to receive a parsed `"structured"` JSON object in `agy_res['content']['structured']`.
 - **Conversation Continuity (`conversation_id`)**: Pass `"conversation_id"` from a previous call to continue an ongoing session (`agy --conversation <id>`).
 - **Non-Blocking Async Events (`async: true`)**: Pass `"async": true` and `"event_type": "agy_camera_done"` (plus optional `"request_id"` / `"metadata"`) to receive an immediate `202 Accepted` response and trigger an automation on the resulting Home Assistant event (`trigger: event`, `event_type: agy_camera_done`).
-- **Session Auth Healthcheck (`GET /health`)**: Poll `http://68eea963-antigravity:8120/health` with a RESTful `binary_sensor` checking `value_json.authenticated` to be notified if your Google OAuth session expires.
+- **Session Auth Healthcheck (`GET /health`)**: Poll `http://68eea963-antigravity:8120/health` with a REST `binary_sensor` to alert if your Google OAuth session expires:
+
+```yaml
+rest:
+  - resource: "http://68eea963-antigravity:8120/health"
+    scan_interval: 300
+    binary_sensor:
+      - name: "Antigravity Authenticated"
+        value_template: "{{ value_json.authenticated }}"
+        device_class: connectivity
+```
 
 ---
 
