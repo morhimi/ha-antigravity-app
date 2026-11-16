@@ -90,7 +90,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD ["/bin/bash", "-o", "pipefail", "-c", "curl -fsS http://127.0.0.1:8099/ >/dev/null || exit 1"]
 
 LABEL \
-    org.opencontainers.image.title="Home Assistant App: Antigravity CLI" \
+    org.opencontainers.image.title="Home Assistant App: Google Antigravity (Gemini AI)" \
     org.opencontainers.image.description="Google Antigravity autonomous AI agent CLI (agy) with persistent Remote Control daemon and Ingress web terminal" \
     org.opencontainers.image.source="https://github.com/morhimi/ha-antigravity-app" \
     org.opencontainers.image.licenses="MIT"

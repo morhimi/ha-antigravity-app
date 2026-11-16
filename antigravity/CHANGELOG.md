@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1
+
+- Updated App display name to `Google Antigravity (Gemini AI)`.
+
 ## 1.5.0
 
 - Added structured JSON output support (`json_schema`) to `POST /api/generate`, passing `--json-schema` to `agy` and returning parsed `"structured"` JSON alongside `"response"`.
