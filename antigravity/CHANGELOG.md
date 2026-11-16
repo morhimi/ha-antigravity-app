@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.5
+
+- Updated Home Assistant CLI (`ha`) from `5.6.0` to `6.0.0`.
+
 ## 1.4.4
 
 - Updated the default REST API model (`default_model` / `AGY_DEFAULT_MODEL`) to `gemini-4-hydrogen-low`.
