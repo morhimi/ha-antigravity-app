@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -112,3 +113,8 @@ jobs:
               --title "${pr_title}" \
               --body "${pr_body}"
           fi
+
+          # GITHUB_TOKEN PRs do not trigger on:pull_request workflows by GitHub design,
+          # so dispatch Lint and dry-run Builder directly on the PR branch.
+          gh workflow run lint.yaml --ref "${branch_name}"
+          gh workflow run builder.yaml --ref "${branch_name}"
