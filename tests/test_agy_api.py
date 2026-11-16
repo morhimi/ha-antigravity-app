@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Unit and HTTP integration tests for antigravity/rootfs/usr/local/bin/agy-api-server.py.
 Runs entirely using the Python standard library (unittest + asyncio + urllib).
@@ -244,7 +243,7 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Invalid 'timeout'", body["message"])
 
         status2, body2 = await self._request("POST", "/api/generate", {"prompt": "Hello", "timeout": -10})
-        self.assertEqual(status, 400)
+        self.assertEqual(status2, 400)
         self.assertIn("Invalid 'timeout'", body2["message"])
 
     async def test_http_content_length_and_timeout_guards(self) -> None:

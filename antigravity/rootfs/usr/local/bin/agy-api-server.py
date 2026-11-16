@@ -124,7 +124,7 @@ async def run_agy_inference(
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             raise TimeoutError(f"agy process timed out after {timeout} seconds")
@@ -151,13 +151,13 @@ async def run_agy_inference(
 
 
 async def _send_json(writer: asyncio.StreamWriter, status_line: str, payload: dict) -> None:
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    body = json.dumps(payload, ensure_ascii=False).encode()
     header = (
         f"HTTP/1.1 {status_line}\r\n"
         "Content-Type: application/json; charset=utf-8\r\n"
         f"Content-Length: {len(body)}\r\n"
         "Connection: close\r\n\r\n"
-    ).encode("utf-8")
+    ).encode()
     writer.write(header + body)
     await writer.drain()
 
@@ -165,7 +165,7 @@ async def _send_json(writer: asyncio.StreamWriter, status_line: str, payload: di
 async def _read_http_request(reader: asyncio.StreamReader) -> tuple[str, str, bytes] | None:
     try:
         line = await asyncio.wait_for(reader.readline(), timeout=HTTP_READ_TIMEOUT)
-    except asyncio.TimeoutError as err:
+    except TimeoutError as err:
         raise HttpClientError("408 Request Timeout", "Timed out reading HTTP request line") from err
 
     if not line:
@@ -181,7 +181,7 @@ async def _read_http_request(reader: asyncio.StreamReader) -> tuple[str, str, by
     while True:
         try:
             header_line = await asyncio.wait_for(reader.readline(), timeout=HTTP_READ_TIMEOUT)
-        except asyncio.TimeoutError as err:
+        except TimeoutError as err:
             raise HttpClientError("408 Request Timeout", "Timed out reading HTTP headers") from err
         if header_line in (b"\r\n", b"\n", b""):
             break
@@ -209,7 +209,7 @@ async def _read_http_request(reader: asyncio.StreamReader) -> tuple[str, str, by
 
     try:
         body = await asyncio.wait_for(reader.readexactly(content_length), timeout=HTTP_READ_TIMEOUT)
-    except asyncio.TimeoutError as err:
+    except TimeoutError as err:
         raise HttpClientError("408 Request Timeout", "Timed out reading request body") from err
     except asyncio.IncompleteReadError as err:
         raise HttpClientError("400 Bad Request", "Incomplete request body received") from err
@@ -247,7 +247,7 @@ class AgyApiServer:
             if path in ("/api/generate", "/api/v1/vision") and method == "POST":
                 try:
                     data = json.loads(body.decode("utf-8", errors="replace"))
-                except Exception:
+                except (json.JSONDecodeError, UnicodeDecodeError):
                     await _send_json(writer, "400 Bad Request", {"status": "error", "message": "Invalid JSON payload"})
                     return
 
@@ -322,7 +322,7 @@ class AgyApiServer:
                 {"status": "error", "message": str(err)},
             )
         except Exception as err:
-            logger.exception("Error handling request: %s", err)
+            logger.exception("Unhandled error handling request")
             await _send_json(
                 writer,
                 "500 Internal Server Error",
@@ -332,8 +332,8 @@ class AgyApiServer:
             writer.close()
             try:
                 await writer.wait_closed()
-            except Exception:
-                pass
+            except OSError:
+                logger.debug("Socket close failed cleanly", exc_info=True)
 
 
 async def main() -> None:
