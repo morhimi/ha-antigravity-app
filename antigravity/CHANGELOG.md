@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.2
+
+- Persisted `/root/.local` (`/data/.local`) and `/root/workspace` (`/data/workspace`) across container rebuilds and App upgrades, and documented workspace persistence boundaries in `DOCS.md`.
+
 ## 1.5.1
 
 - Updated App display name to `Google Antigravity (Gemini AI)`.

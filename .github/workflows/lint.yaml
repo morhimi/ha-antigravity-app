@@ -246,9 +246,11 @@ jobs:
             '.mcpServers["home-assistant"].url == "http://homeassistant:8123/api/mcp"' \
             /data/.gemini/config/mcp_config.json
 
-          # 5. Verify Base64 SSH private key installation, derived .pub, and ssh_config
+          # 5. Verify SSH keypair, ssh_config, and /root/.local + /root/workspace symlinks
           docker exec antigravity-smoke test -f /data/.ssh/id_ed25519
           docker exec antigravity-smoke test -f /data/.ssh/id_ed25519.pub
+          test "$(docker exec antigravity-smoke readlink /root/.local)" = "/data/.local"
+          test "$(docker exec antigravity-smoke readlink /root/workspace)" = "/data/workspace"
           actual_ssh_pub="$(docker exec antigravity-smoke cat /data/.ssh/id_ed25519.pub)"
           test "${actual_ssh_pub}" = "${expected_ssh_pub}"
           docker exec antigravity-smoke grep -q \

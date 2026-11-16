@@ -80,5 +80,9 @@ All stateful data lives on `/data` and survives app restarts, container upgrades
 - `/data/bin/agy` (symlinked at `/usr/local/bin/agy`): Allows `agy` to self-update in-place without losing updates on container restart.
 - `/data/.gemini` (symlinked at `/root/.gemini`): Stores OAuth tokens, `settings.json`, `mcp_config.json`, skills, rules, plugins, and conversation transcripts.
 - `/data/.ssh` (symlinked at `/root/.ssh`): Stores SSH keys and `known_hosts` for managing external hosts/routers.
+- `/data/.local` (symlinked at `/root/.local`): Preserves user-installed tools and Python packages (`~/.local/bin`).
+- `/data/workspace` (symlinked at `/root/workspace`): Persistent general-purpose workspace directory inside `/root`.
 - `/homeassistant` (also symlinked at `/config`): Your Home Assistant configuration directory (`rw`).
 - `/share`, `/media`, `/backup`, `/local_apps`, `/app_configs`: Mounted for full system administration.
+
+> **Important:** Container rebuilds during App updates reset everything outside `/data` and Home Assistant mapped volumes. Always keep project workspaces under `/homeassistant` or `/data/workspace` (`~/workspace`), not in ad-hoc `/root/<folder>` paths.

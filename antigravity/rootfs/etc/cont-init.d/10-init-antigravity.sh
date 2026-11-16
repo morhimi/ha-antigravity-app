@@ -36,12 +36,13 @@ mkdir -p \
     /data/.gemini/config \
     /data/.ssh \
     /data/.config \
+    /data/.local/bin \
     /data/workspace
 
 chmod 700 /data/.ssh
 
-# 2. Link root dotfiles to persistent /data storage
-for item in .gemini .ssh .config; do
+# 2. Link root dotfiles and persistent workspace to /data storage
+for item in .gemini .ssh .config .local workspace; do
     if [ -d "/root/${item}" ] && [ ! -L "/root/${item}" ]; then
         cp -rn "/root/${item}/." "/data/${item}/" 2>/dev/null || true
         rm -rf "/root/${item}"
