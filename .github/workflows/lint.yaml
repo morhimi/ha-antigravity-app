@@ -64,10 +64,12 @@ jobs:
         run: |
           pipx run ruff check \
             antigravity/rootfs/usr/local/bin/agy-api-server.py \
+            scripts/sync_models.py \
             tests/test_agy_api.py \
             tests/test_docs_sync.py
           python3 -m py_compile \
             antigravity/rootfs/usr/local/bin/agy-api-server.py \
+            scripts/sync_models.py \
             tests/test_agy_api.py \
             tests/test_docs_sync.py
           python3 -m unittest discover -s tests -v
@@ -88,6 +90,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
+
+      - name: Set up QEMU for aarch64 smoke check
+        uses: docker/setup-qemu-action@v4.4.0
+        with:
+          platforms: arm64
 
       - name: Build App container image (amd64)
         run: |
@@ -364,3 +371,21 @@ jobs:
           docker rm -f antigravity-smoke
           rm -rf "${ssh_tmp}"
           sudo rm -rf "${cache_dir}"
+
+      - name: Build & verify aarch64 container binaries under QEMU
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            --build-arg TARGETARCH=arm64 \
+            --tag antigravity:smoke-arm64 \
+            --load \
+            ./antigravity
+
+          docker run --rm --platform linux/arm64 --entrypoint /bin/bash antigravity:smoke-arm64 -c '
+            set -euo pipefail
+            test "$(uname -m)" = "aarch64"
+            /opt/antigravity/bin/agy --version
+            /usr/bin/ttyd --version
+            /usr/bin/ha --version
+            python3 --version
+          '

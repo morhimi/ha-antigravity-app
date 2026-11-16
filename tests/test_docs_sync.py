@@ -4,6 +4,7 @@ Ensures config.yaml, translations, DOCS.md, READMEs, CHANGELOG.md,
 the Blueprint, and agy-api-server.py stay synchronized across releases.
 """
 
+import importlib.util
 import re
 import unittest
 from pathlib import Path
@@ -103,6 +104,35 @@ class TestDocsSync(unittest.TestCase):
         for param in ("json_schema", "conversation_id", "async", "event_type"):
             self.assertIn(f'"{param}"', self.docs_text, f"rest_command param '{param}' missing from DOCS.md")
             self.assertIn(f'"{param}"', self.root_readme_text, f"rest_command param '{param}' missing from README.md")
+
+    def test_default_model_in_schema_dropdown_and_sync_helper(self) -> None:
+        default_match = re.search(r'^\s+default_model:\s*"([^"]+)"', self.config_text, re.MULTILINE)
+        schema_match = re.search(r"^\s+default_model:\s*list\(([^)]+)\)", self.config_text, re.MULTILINE)
+        if default_match is None or schema_match is None:
+            self.fail("Missing default_model option or schema list(...) in config.yaml")
+
+        allowed_models = schema_match.group(1).split("|")
+        self.assertIn(default_match.group(1), allowed_models)
+        self.assertEqual(len(allowed_models), len(set(allowed_models)), "Duplicate models in schema list")
+
+        sync_script = REPO_ROOT / "scripts" / "sync_models.py"
+        spec = importlib.util.spec_from_file_location("sync_models", sync_script)
+        if spec is None or spec.loader is None:
+            self.fail("Could not load scripts/sync_models.py")
+        sync_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sync_mod)
+
+        parsed = sync_mod.parse_agy_models_output(
+            "\r\x1b[2K⠋ Fetching available models...\n"
+            "gemini-4-argon-medium\tGemini 4 Argon (Medium)\n"
+            "gemini-4-hydrogen-low     Gemini 4 Hydrogen (Low)\n"
+            "gemini-5-new-high\tGemini 5 New (High)\n"
+        )
+        self.assertEqual(parsed, ["gemini-4-argon-medium", "gemini-4-hydrogen-low", "gemini-5-new-high"])
+        updated, added, removed = sync_mod.build_updated_config(self.config_text, parsed)
+        self.assertEqual(added, ["gemini-5-new-high"])
+        self.assertIn("gemini-3.8-flash-low", removed)
+        self.assertIn("list(gemini-4-hydrogen-low|gemini-4-argon-medium|gemini-5-new-high)", updated)
 
     def test_rest_command_name_matches_blueprint(self) -> None:
         self.assertIn("antigravity_generate:", self.docs_text)
