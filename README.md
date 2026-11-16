@@ -91,7 +91,13 @@ data:
 response_variable: agy_res
 ```
 
-The clean model output is returned in `{{ agy_res['content']['response'] }}`. See the full [App Documentation (`antigravity/DOCS.md`)](./antigravity/DOCS.md) for all configuration options.
+The clean model output is returned in `{{ agy_res['content']['response'] }}`. You can also pass `"json_schema"` for deterministic structured JSON outputs (`agy_res['content']['structured']`), `"conversation_id"` for multi-turn context, or `"async": true` + `"event_type"` for non-blocking `202 Accepted` event callbacks. See the full [App Documentation (`antigravity/DOCS.md`)](./antigravity/DOCS.md) for all configuration options.
+
+### One-Click Camera / Doorbell Blueprint
+
+After adding the `rest_command` above, import the ready-to-use camera/doorbell notification blueprint into Home Assistant:
+
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmorhimi%2Fha-antigravity-app%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fantigravity_camera_vision.yaml)
 
 ---
 

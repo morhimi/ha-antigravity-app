@@ -1,0 +1,95 @@
+blueprint:
+  name: Antigravity Camera / Doorbell Vision Summary
+  description: >-
+    Captures a camera snapshot (or analyzes an existing media file) using the
+    local Antigravity REST API (agy-api) and sends a mobile notification.
+  domain: automation
+  source_url: https://github.com/morhimi/ha-antigravity-app/blob/main/blueprints/automation/antigravity_camera_vision.yaml
+  input:
+    trigger_entity:
+      name: Trigger Sensor (Motion / Doorbell / Person)
+      description: Binary sensor whose transition to 'on' triggers analysis.
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+    camera_entity:
+      name: Camera Entity
+      description: Camera to snapshot when triggered.
+      selector:
+        entity:
+          filter:
+            - domain: camera
+    prompt:
+      name: Analysis Prompt
+      description: Instructions sent to Gemini / Antigravity for analyzing the snapshot.
+      default: >-
+        Describe what is happening in this camera snapshot in one concise
+        sentence suitable for a mobile notification.
+      selector:
+        text:
+          multiline: true
+    model:
+      name: Model
+      description: Antigravity model to use for vision analysis.
+      default: gemini-4-hydrogen-low
+      selector:
+        select:
+          options:
+            - gemini-4-hydrogen-low
+            - gemini-4-hydrogen-medium
+            - gemini-4-hydrogen-high
+            - gemini-3.8-flash-low
+            - gemini-4-argon-low
+    notify_device:
+      name: Mobile Device to Notify
+      description: Home Assistant Companion App device that receives the notification.
+      selector:
+        device:
+          filter:
+            - integration: mobile_app
+    cooldown_seconds:
+      name: Cooldown (seconds)
+      description: Minimum wait between consecutive runs to avoid notification spam.
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+
+mode: single
+max_exceeded: silent
+
+trigger:
+  - trigger: state
+    entity_id: !input trigger_entity
+    to: "on"
+
+actions:
+  - variables:
+      snapshot_path: "/media/antigravity_{{ this.entity_id | replace('.', '_') }}.jpg"
+  - action: camera.snapshot
+    target:
+      entity_id: !input camera_entity
+    data:
+      filename: "{{ snapshot_path }}"
+  - action: rest_command.antigravity_generate
+    data:
+      prompt: !input prompt
+      files:
+        - "{{ snapshot_path }}"
+      model: !input model
+      timeout: 120
+    response_variable: agy_res
+  - if:
+      - condition: template
+        value_template: "{{ agy_res.get('status') == 200 and agy_res.get('content', {}).get('response') is defined }}"
+    then:
+      - domain: mobile_app
+        type: notify
+        device_id: !input notify_device
+        title: "Camera Alert"
+        message: "{{ agy_res['content']['response'] }}"
+  - delay:
+      seconds: !input cooldown_seconds

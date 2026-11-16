@@ -189,9 +189,14 @@ jobs:
           # 1. Verify ttyd Ingress endpoint is serving HTTP 200
           curl -fsS http://127.0.0.1:8099/ >/dev/null
 
-          # 1b. Verify agy-api REST endpoint reflects default_timeout=180
-          curl -fsS http://127.0.0.1:8120/health | jq -e \
-            '.status == "ok" and .service == "agy-api" and .default_timeout == 180'
+          # 1b. Verify agy-api REST endpoint reflects default_timeout=180, auth=true, and version
+          curl -fsS http://127.0.0.1:8120/health | jq -e '
+            .status == "ok"
+            and .service == "agy-api"
+            and .default_timeout == 180
+            and .authenticated == true
+            and (.agy_version | length > 0)
+          '
 
           # 2. Verify agy CLI binary is installed in persistent /data/bin/agy
           docker exec antigravity-smoke /usr/local/bin/agy --version
@@ -253,26 +258,43 @@ jobs:
           docker logs antigravity-smoke | grep -E "Starting Home Assistant App: Antigravity CLI v"
           docker logs antigravity-smoke | grep -E "Active Antigravity CLI \(agy\) version:"
 
-          # 7. Verify live POST /api/generate E2E inside container with a stubbed agy binary
+          # 7. Verify live POST /api/generate E2E (sync structured + async 202) with stubbed agy
           docker exec antigravity-smoke sh -c '
             mv -f /data/bin/agy /data/bin/agy.real &&
             {
               echo "#!/usr/bin/env python3"
               echo "import json, sys"
-              echo "out = {\"response\": \"E2E_OK:\" + \" \".join(sys.argv[1:]), \"usage\": {\"tokens\": 10}}"
+              echo "out = {"
+              echo "  \"response\": \"E2E_OK:\" + \" \".join(sys.argv[1:]),"
+              echo "  \"structured_output\": {\"ok\": True},"
+              echo "  \"conversation_id\": \"e2e-conv-1\","
+              echo "  \"usage\": {\"tokens\": 10}"
+              echo "}"
               echo "print(json.dumps(out))"
             } > /data/bin/agy &&
             chmod +x /data/bin/agy
           '
           curl -fsS -X POST http://127.0.0.1:8120/api/generate \
             -H "Content-Type: application/json" \
-            -d '{"prompt":"test-prompt","files":["/media/snap.jpg"],"model":"gemini-4-hydrogen-low"}' \
+            -d '{
+              "prompt":"test-prompt",
+              "files":["/media/snap.jpg"],
+              "model":"gemini-4-hydrogen-low",
+              "json_schema":{"type":"object","properties":{"ok":{"type":"boolean"}}}
+            }' \
             | jq -e '
               .status == "success"
               and (.response | contains("E2E_OK:"))
               and (.response | contains("/media/snap.jpg"))
+              and .structured.ok == true
+              and .conversation_id == "e2e-conv-1"
               and .usage.tokens == 10
             '
+          curl -fsS -X POST http://127.0.0.1:8120/api/generate \
+            -H "Content-Type: application/json" \
+            -d '{"prompt":"async-test","async":true,"event_type":"agy_e2e_done","request_id":"e2e-1"}' \
+            | jq -e '.status == "accepted" and .async == true and .event_type == "agy_e2e_done"'
+          sleep 1
           docker exec antigravity-smoke mv -f /data/bin/agy.real /data/bin/agy
 
           # 8. Verify persistence + baked-in upgrade (even when auto_update_cli=false) across restart

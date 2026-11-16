@@ -62,7 +62,14 @@ rest_command:
       }
 ```
 
-The JSON response (`{"status": "success", "response": "...", "model": "...", "duration_seconds": ...}`) is returned in `response_variable['content']['response']`.
+The JSON response (`{"status": "success", "response": "...", "model": "...", "duration_seconds": ..., "conversation_id": "..."}`) is returned in `response_variable['content']['response']`.
+
+### Advanced REST API Features
+
+- **Structured JSON Outputs (`json_schema`)**: Pass `"json_schema": {"type": "object", "properties": {"person_detected": {"type": "boolean"}}, "required": ["person_detected"]}` in the payload to receive a parsed `"structured"` JSON object in `agy_res['content']['structured']`.
+- **Conversation Continuity (`conversation_id`)**: Pass `"conversation_id"` from a previous call to continue an ongoing session (`agy --conversation <id>`).
+- **Non-Blocking Async Events (`async: true`)**: Pass `"async": true` and `"event_type": "agy_camera_done"` (plus optional `"request_id"` / `"metadata"`) to receive an immediate `202 Accepted` response and trigger an automation on the resulting Home Assistant event (`trigger: event`, `event_type: agy_camera_done`).
+- **Session Auth Healthcheck (`GET /health`)**: Poll `http://68eea963-antigravity:8120/health` with a RESTful `binary_sensor` checking `value_json.authenticated` to be notified if your Google OAuth session expires.
 
 ---
 

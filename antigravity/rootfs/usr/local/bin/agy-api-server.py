@@ -8,8 +8,12 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import time
+import urllib.error
+import urllib.request
+import uuid
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,6 +26,8 @@ DEFAULT_MODEL = os.environ.get("AGY_DEFAULT_MODEL", "gemini-4-hydrogen-low")
 DEFAULT_TIMEOUT = int(os.environ.get("AGY_DEFAULT_TIMEOUT", "120"))
 WORKSPACE = os.environ.get("AGY_WORKSPACE", "/homeassistant")
 MEDIA_DIR = os.environ.get("AGY_MEDIA_DIR", "/media")
+STATE_FILE = os.environ.get("AGY_STATE_FILE", "/data/.gemini/antigravity-cli/antigravity_state.pbtxt")
+HA_API_URL = os.environ.get("AGY_HA_API_URL", "http://supervisor/core/api").rstrip("/")
 MAX_BODY_BYTES = int(os.environ.get("AGY_MAX_BODY_BYTES", str(1024 * 1024)))
 HTTP_READ_TIMEOUT = float(os.environ.get("AGY_HTTP_READ_TIMEOUT", "10"))
 AGY_BIN = os.environ.get("AGY_BIN") or (
@@ -30,6 +36,9 @@ AGY_BIN = os.environ.get("AGY_BIN") or (
 
 # Limit concurrent heavy LLM tasks to avoid starving container resources
 SEMAPHORE = asyncio.Semaphore(2)
+BACKGROUND_TASKS: set[asyncio.Task] = set()
+EVENT_TYPE_RE = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
+_VERSION_CACHE: tuple[str, float, str] | None = None
 
 
 class HttpClientError(Exception):
@@ -50,8 +59,38 @@ def _derive_effort(model: str, explicit_effort: str | None) -> str:
     return "low"
 
 
-def _parse_cli_json_output(raw_stdout: str) -> tuple[str, dict]:
-    """Extract clean response and usage dict from CLI stdout, tolerating prefix banner lines."""
+def _is_authenticated() -> bool:
+    return os.path.exists(STATE_FILE) or bool(os.environ.get("GEMINI_API_KEY"))
+
+
+async def _get_agy_version() -> str:
+    global _VERSION_CACHE
+    try:
+        mtime = os.path.getmtime(AGY_BIN)
+    except OSError:
+        return "unknown"
+
+    if _VERSION_CACHE and _VERSION_CACHE[0] == AGY_BIN and _VERSION_CACHE[1] == mtime:
+        return _VERSION_CACHE[2]
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            AGY_BIN,
+            "--version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=2.0)
+        version = stdout.decode("utf-8", errors="replace").strip() or "unknown"
+    except (OSError, TimeoutError):
+        version = "unknown"
+
+    _VERSION_CACHE = (AGY_BIN, mtime, version)
+    return version
+
+
+def _parse_cli_json_output(raw_stdout: str, expect_structured: bool = False) -> tuple[str, dict, dict]:
+    """Extract response text, usage dict, and metadata from CLI JSON stdout."""
     candidates = [raw_stdout]
     start_idx = raw_stdout.find("{")
     end_idx = raw_stdout.rfind("}")
@@ -67,11 +106,21 @@ def _parse_cli_json_output(raw_stdout: str) -> tuple[str, dict]:
                 response_text = str(parsed.get("response", raw_stdout)).strip()
                 usage = parsed.get("usage")
                 usage_data = usage if isinstance(usage, dict) else {}
-                return response_text, usage_data
+                extra: dict = {}
+                if "conversation_id" in parsed and parsed["conversation_id"]:
+                    extra["conversation_id"] = str(parsed["conversation_id"])
+                if "structured_output" in parsed and parsed["structured_output"] is not None:
+                    extra["structured"] = parsed["structured_output"]
+                elif expect_structured and response_text:
+                    try:
+                        extra["structured"] = json.loads(response_text)
+                    except json.JSONDecodeError:
+                        pass
+                return response_text, usage_data, extra
         except json.JSONDecodeError:
             continue
 
-    return raw_stdout.strip(), {}
+    return raw_stdout.strip(), {}, {}
 
 
 async def run_agy_inference(
@@ -80,6 +129,8 @@ async def run_agy_inference(
     model: str,
     effort: str,
     timeout: int,
+    json_schema: str | None = None,
+    conversation_id: str | None = None,
 ) -> dict:
     start_time = time.time()
 
@@ -107,6 +158,10 @@ async def run_agy_inference(
     ]
     if clean_files and MEDIA_DIR and os.path.isdir(MEDIA_DIR):
         cmd.extend(["--add-dir", MEDIA_DIR])
+    if json_schema:
+        cmd.extend(["--json-schema", json_schema])
+    if conversation_id:
+        cmd.extend(["--conversation", conversation_id])
     cmd.extend(["-p", full_prompt])
 
     env = os.environ.copy()
@@ -124,10 +179,10 @@ async def run_agy_inference(
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except TimeoutError:
+        except TimeoutError as err:
             proc.kill()
             await proc.wait()
-            raise TimeoutError(f"agy process timed out after {timeout} seconds")
+            raise TimeoutError(f"agy process timed out after {timeout} seconds") from err
 
     elapsed = round(time.time() - start_time, 2)
     raw_stdout = stdout.decode("utf-8", errors="replace").strip()
@@ -136,18 +191,81 @@ async def run_agy_inference(
     if proc.returncode != 0:
         raise RuntimeError(f"agy exited with code {proc.returncode}: {err_text or raw_stdout}")
 
-    response_text, usage_data = _parse_cli_json_output(raw_stdout)
+    response_text, usage_data, extra = _parse_cli_json_output(raw_stdout, expect_structured=bool(json_schema))
 
-    result = {
+    result: dict = {
         "status": "success",
         "response": response_text,
         "model": model,
         "duration_seconds": elapsed,
     }
+    result.update(extra)
     if usage_data:
         result["usage"] = usage_data
 
     return result
+
+
+def _post_ha_event_sync(event_type: str, payload: dict) -> None:
+    token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
+    if not token:
+        logger.warning("Skipping HA event '%s' callback: SUPERVISOR_TOKEN is not set", event_type)
+        return
+
+    url = f"{HA_API_URL}/events/{event_type}"
+    data = json.dumps(payload, ensure_ascii=False).encode()
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+    except (urllib.error.URLError, OSError):
+        logger.exception("Failed to fire Home Assistant event '%s'", event_type)
+
+
+async def _run_async_and_emit(
+    event_type: str,
+    request_id: str,
+    prompt: str,
+    files: list[str],
+    model: str,
+    effort: str,
+    timeout: int,
+    json_schema: str | None,
+    conversation_id: str | None,
+    metadata: dict | None,
+) -> None:
+    try:
+        result = await run_agy_inference(
+            prompt,
+            files,
+            model,
+            effort,
+            timeout,
+            json_schema=json_schema,
+            conversation_id=conversation_id,
+        )
+        event_payload = {**result, "request_id": request_id}
+    except Exception as err:  # noqa: BLE001
+        logger.exception("Async inference '%s' failed", request_id)
+        event_payload = {
+            "status": "error",
+            "request_id": request_id,
+            "model": model,
+            "message": str(err),
+        }
+
+    if metadata:
+        event_payload["metadata"] = metadata
+
+    await asyncio.to_thread(_post_ha_event_sync, event_type, event_payload)
 
 
 async def _send_json(writer: asyncio.StreamWriter, status_line: str, payload: dict) -> None:
@@ -231,6 +349,7 @@ class AgyApiServer:
 
             # Route: Healthcheck
             if path == "/health" and method == "GET":
+                agy_version = await _get_agy_version()
                 await _send_json(
                     writer,
                     "200 OK",
@@ -239,6 +358,8 @@ class AgyApiServer:
                         "service": "agy-api",
                         "default_model": DEFAULT_MODEL,
                         "default_timeout": DEFAULT_TIMEOUT,
+                        "authenticated": _is_authenticated(),
+                        "agy_version": agy_version,
                     },
                 )
                 return
@@ -266,6 +387,33 @@ class AgyApiServer:
                 model = str(data.get("model") or DEFAULT_MODEL).strip()
                 effort = _derive_effort(model, data.get("effort"))
 
+                raw_schema = data.get("json_schema")
+                json_schema: str | None = None
+                if raw_schema is not None:
+                    if isinstance(raw_schema, dict):
+                        json_schema = json.dumps(raw_schema, separators=(",", ":"))
+                    elif isinstance(raw_schema, str) and raw_schema.strip():
+                        try:
+                            json.loads(raw_schema)
+                        except json.JSONDecodeError:
+                            await _send_json(
+                                writer,
+                                "400 Bad Request",
+                                {"status": "error", "message": "Invalid 'json_schema': must be valid JSON"},
+                            )
+                            return
+                        json_schema = raw_schema.strip()
+                    else:
+                        await _send_json(
+                            writer,
+                            "400 Bad Request",
+                            {"status": "error", "message": "Invalid 'json_schema': must be an object or JSON string"},
+                        )
+                        return
+
+                raw_conv = data.get("conversation_id")
+                conversation_id = str(raw_conv).strip() if raw_conv else None
+
                 try:
                     timeout = int(data.get("timeout") or DEFAULT_TIMEOUT)
                     if timeout <= 0:
@@ -286,14 +434,71 @@ class AgyApiServer:
                     )
                     return
 
+                is_async = bool(data.get("async", False)) or bool(data.get("event_type"))
+                if is_async:
+                    event_type = str(data.get("event_type") or "agy_generate_complete").strip()
+                    if not EVENT_TYPE_RE.match(event_type):
+                        await _send_json(
+                            writer,
+                            "400 Bad Request",
+                            {"status": "error", "message": "Invalid 'event_type': alphanumeric/._- only"},
+                        )
+                        return
+                    raw_meta = data.get("metadata")
+                    if raw_meta is not None and not isinstance(raw_meta, dict):
+                        await _send_json(
+                            writer,
+                            "400 Bad Request",
+                            {"status": "error", "message": "Invalid 'metadata': must be a JSON object"},
+                        )
+                        return
+                    request_id = str(data.get("request_id") or uuid.uuid4().hex)
+                    task = asyncio.create_task(
+                        _run_async_and_emit(
+                            event_type=event_type,
+                            request_id=request_id,
+                            prompt=prompt,
+                            files=files,
+                            model=model,
+                            effort=effort,
+                            timeout=timeout,
+                            json_schema=json_schema,
+                            conversation_id=conversation_id,
+                            metadata=raw_meta,
+                        )
+                    )
+                    BACKGROUND_TASKS.add(task)
+                    task.add_done_callback(BACKGROUND_TASKS.discard)
+                    await _send_json(
+                        writer,
+                        "202 Accepted",
+                        {
+                            "status": "accepted",
+                            "async": True,
+                            "event_type": event_type,
+                            "request_id": request_id,
+                            "model": model,
+                        },
+                    )
+                    return
+
                 logger.info(
-                    "Running inference (model=%s, effort=%s, files=%d, timeout=%ds)...",
+                    "Running inference (model=%s, effort=%s, files=%d, timeout=%ds, structured=%s)...",
                     model,
                     effort,
                     len(files),
                     timeout,
+                    bool(json_schema),
                 )
-                result = await run_agy_inference(prompt, files, model, effort, timeout)
+                result = await run_agy_inference(
+                    prompt,
+                    files,
+                    model,
+                    effort,
+                    timeout,
+                    json_schema=json_schema,
+                    conversation_id=conversation_id,
+                )
                 logger.info(
                     "Inference completed in %.2fs (model=%s)",
                     result["duration_seconds"],

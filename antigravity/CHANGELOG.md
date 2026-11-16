@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0
+
+- Added structured JSON output support (`json_schema`) to `POST /api/generate`, passing `--json-schema` to `agy` and returning parsed `"structured"` JSON alongside `"response"`.
+- Added multi-turn conversation continuity (`conversation_id`) propagation and `--conversation` resume support in `POST /api/generate`.
+- Added non-blocking async event mode (`"async": true`, `"event_type"`, optional `"request_id"` / `"metadata"`) returning `202 Accepted` immediately and firing a Home Assistant Core event via the Supervisor API when inference finishes.
+- Enhanced `GET /health` with `"authenticated"` (`true`/`false`) and `"agy_version"` telemetry for Home Assistant health monitoring sensors.
+- Added a ready-to-import Home Assistant Automation Blueprint (`blueprints/automation/antigravity_camera_vision.yaml`).
+
 ## 1.4.6
 
 - Exposed `default_timeout` (`10–600` seconds, default `120`) in App configuration (`config.yaml` / `translations/en.yaml`) and wired `AGY_DEFAULT_TIMEOUT` in `services.d/agy-api/run`.
