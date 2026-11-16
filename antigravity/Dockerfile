@@ -7,7 +7,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG TARGETARCH
 ARG TTYD_VERSION=1.7.7
-ARG HA_CLI_VERSION=5.6.0
+ARG HA_CLI_VERSION=6.0.0
 
 # Install developer and system administration packages
 RUN \
