@@ -64,10 +64,12 @@ jobs:
         run: |
           pipx run ruff check \
             antigravity/rootfs/usr/local/bin/agy-api-server.py \
-            tests/test_agy_api.py
+            tests/test_agy_api.py \
+            tests/test_docs_sync.py
           python3 -m py_compile \
             antigravity/rootfs/usr/local/bin/agy-api-server.py \
-            tests/test_agy_api.py
+            tests/test_agy_api.py \
+            tests/test_docs_sync.py
           python3 -m unittest discover -s tests -v
 
       - name: Run actionlint on GitHub Actions workflows
