@@ -17,10 +17,11 @@ configuration:
       Run the persistent 'agy remote-control' background daemon so you can
       control sessions remotely from any browser or mobile device.
   auto_update_cli:
-    name: Auto-Update Antigravity CLI on Start
+    name: Auto-Update Antigravity CLI
     description: >-
       Automatically check for and install the latest upstream 'agy' CLI release
-      into persistent storage when the app starts.
+      into persistent storage on startup and hourly, automatically reloading the
+      Remote Control daemon when a newer binary is installed.
   workspace_dir:
     name: Default Workspace Directory
     description: >-

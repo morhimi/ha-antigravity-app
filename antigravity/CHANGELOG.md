@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.4
+
+- Tracked the active `/data/bin/agy` binary (`inode:mtime` and version) in `agy-remote` so background self-updates or manual `agy update` runs automatically restart only the `agy remote-control` daemon without requiring a full Home Assistant App restart, and promoted newer binaries written to `/root/.local/bin/agy` into `/data/bin/agy`.
+- Shortened periodic `auto_update_cli` checks in `agy-remote` from 24 hours to 1 hour using a lightweight upstream release manifest check (`manifests/linux_<arch>.json`) with `agy update` and staged `install.sh` fallback.
+
 ## 1.5.3
 
 - Added `gemini-pro-orchestrator-g1-pro` to the `default_model` dropdown in `config.yaml` and updated the model catalog in `README.md`.

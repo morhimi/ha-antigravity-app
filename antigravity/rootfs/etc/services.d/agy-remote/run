@@ -24,8 +24,91 @@ workspace_dir="$(bashio::config 'workspace_dir')"
 mkdir -p "${workspace_dir}"
 cd "${workspace_dir}" || exit 1
 
-agy_version="$(/usr/local/bin/agy --version 2>/dev/null || echo 'unknown')"
-bashio::log.info "Starting Antigravity Remote Control supervisor (instance: ${instance_name}, agy v${agy_version})..."
+AGY_BIN="/data/bin/agy"
+LOCAL_AGY_BIN="/root/.local/bin/agy"
+MANIFEST_BASE_URL="https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests"
+UPDATE_CHECK_INTERVAL=3600
+
+get_bin_version() {
+    local bin_path="$1"
+    if [ -x "${bin_path}" ]; then
+        "${bin_path}" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true
+    fi
+}
+
+get_bin_id() {
+    stat -c '%i:%Y' "${AGY_BIN}" 2>/dev/null || true
+}
+
+get_manifest_platform() {
+    case "$(uname -m)" in
+        x86_64|amd64) echo "linux_amd64" ;;
+        aarch64|arm64) echo "linux_arm64" ;;
+        *) echo "" ;;
+    esac
+}
+
+# If agy's self-updater ever writes a newer binary into ~/.local/bin/agy,
+# promote it atomically into /data/bin/agy so all paths stay unified.
+sync_local_bin() {
+    if [ -x "${LOCAL_AGY_BIN}" ] && [ ! -L "${LOCAL_AGY_BIN}" ]; then
+        local local_ver disk_ver
+        local_ver="$(get_bin_version "${LOCAL_AGY_BIN}")"
+        disk_ver="$(get_bin_version "${AGY_BIN}")"
+        if [ -n "${local_ver}" ] && { [ -z "${disk_ver}" ] || dpkg --compare-versions "${local_ver}" gt "${disk_ver}"; }; then
+            bashio::log.info "Promoting newer Antigravity CLI from ${LOCAL_AGY_BIN} (v${local_ver}) to ${AGY_BIN}..."
+            mv -f "${LOCAL_AGY_BIN}" "${AGY_BIN}"
+            chmod +x "${AGY_BIN}"
+            ln -sfn "${AGY_BIN}" /usr/local/bin/agy
+        fi
+    fi
+}
+
+check_upstream_update() {
+    local disk_ver platform latest_ver stage_dir after_ver
+    disk_ver="$(get_bin_version "${AGY_BIN}")"
+    platform="$(get_manifest_platform)"
+    latest_ver=""
+
+    if [ -n "${platform}" ]; then
+        latest_ver="$(
+            curl -fsSL --max-time 10 "${MANIFEST_BASE_URL}/${platform}.json" 2>/dev/null \
+                | jq -r '.version // empty' 2>/dev/null \
+                || true
+        )"
+    fi
+
+    if [ -n "${latest_ver}" ] && [ -n "${disk_ver}" ]; then
+        if ! dpkg --compare-versions "${latest_ver}" gt "${disk_ver}"; then
+            return 0
+        fi
+        bashio::log.info "New Antigravity CLI release available upstream (v${disk_ver} -> v${latest_ver}); updating..."
+    fi
+
+    # Try built-in updater first (also acts as fallback if manifest lookup fails)
+    /usr/local/bin/agy update >/dev/null 2>&1 || true
+    sync_local_bin
+
+    # If a newer manifest version is still pending on disk, fall back to the
+    # official staged install.sh download + atomic mv into /data/bin/agy.
+    after_ver="$(get_bin_version "${AGY_BIN}")"
+    if [ -n "${latest_ver}" ] && [ -n "${after_ver}" ] && dpkg --compare-versions "${latest_ver}" gt "${after_ver}"; then
+        stage_dir="/tmp/agy-update-stage"
+        rm -rf "${stage_dir}"
+        mkdir -p "${stage_dir}"
+        if curl -fsSL --max-time 60 https://antigravity.google/cli/install.sh | bash -s -- --dir "${stage_dir}" >/dev/null 2>&1; then
+            if [ -x "${stage_dir}/agy" ]; then
+                mv -f "${stage_dir}/agy" "${AGY_BIN}"
+                chmod +x "${AGY_BIN}"
+                ln -sfn "${AGY_BIN}" /usr/local/bin/agy
+            fi
+        fi
+        rm -rf "${stage_dir}"
+    fi
+}
+
+agy_version="$(get_bin_version "${AGY_BIN}")"
+bashio::log.info "Starting Antigravity Remote Control supervisor (instance: ${instance_name}, agy v${agy_version:-unknown})..."
 
 cleanup() {
     bashio::log.info "Stopping Antigravity Remote Control daemon..."
@@ -36,23 +119,40 @@ trap cleanup SIGTERM SIGINT
 
 notified_unsigned=false
 last_update_check="$(date +%s)"
+daemon_bin_id=""
+daemon_ver=""
 
 while true; do
-    # Periodic 24-hour CLI self-update check for long-running containers
+    # 1. Keep /data/bin/agy unified if agy wrote a newer binary to ~/.local/bin/agy
+    sync_local_bin
+
+    # 2. Periodic hourly upstream update check when auto_update_cli is enabled
     now="$(date +%s)"
-    if [ "${auto_update_cli}" = "true" ] && [ $((now - last_update_check)) -ge 86400 ]; then
+    if [ "${auto_update_cli}" = "true" ] && [ $((now - last_update_check)) -ge "${UPDATE_CHECK_INTERVAL}" ]; then
         last_update_check="${now}"
-        before_ver="$(/usr/local/bin/agy --version 2>/dev/null || echo '')"
-        /usr/local/bin/agy update >/dev/null 2>&1 || true
-        after_ver="$(/usr/local/bin/agy --version 2>/dev/null || echo '')"
-        if [ -n "${after_ver}" ] && [ "${before_ver}" != "${after_ver}" ]; then
-            bashio::log.info "Antigravity CLI updated (${before_ver} -> ${after_ver}); restarting Remote Control daemon..."
+        check_upstream_update
+    fi
+
+    # 3. Detect any on-disk binary upgrade (background self-update, manual `agy update`,
+    #    or hourly check above) and restart only the Remote Control daemon cleanly.
+    cur_bin_id="$(get_bin_id)"
+    if [ -n "${daemon_bin_id}" ] && [ -n "${cur_bin_id}" ] && [ "${cur_bin_id}" != "${daemon_bin_id}" ]; then
+        cur_ver="$(get_bin_version "${AGY_BIN}")"
+        if [ -n "${cur_ver}" ] && [ "${cur_ver}" != "${daemon_ver}" ]; then
+            bashio::log.info "Antigravity CLI updated on disk (v${daemon_ver:-unknown} -> v${cur_ver}); restarting Remote Control daemon..."
             /usr/local/bin/agy remote-control stop >/dev/null 2>&1 || true
+            sleep 2
+        else
+            daemon_bin_id="${cur_bin_id}"
         fi
     fi
 
     status_out="$(/usr/local/bin/agy remote-control status 2>&1 || true)"
     if echo "${status_out}" | grep -qiE "Daemon (status|state)[ :=]+(running|active)"; then
+        if [ -z "${daemon_bin_id}" ]; then
+            daemon_bin_id="$(get_bin_id)"
+            daemon_ver="$(get_bin_version "${AGY_BIN}")"
+        fi
         sleep 15 &
         wait $!
         continue
@@ -77,7 +177,9 @@ while true; do
 
     if echo "${start_out}" | grep -qi "started"; then
         notified_unsigned=false
-        bashio::log.info "${start_out}"
+        daemon_bin_id="$(get_bin_id)"
+        daemon_ver="$(get_bin_version "${AGY_BIN}")"
+        bashio::log.info "${start_out} (agy v${daemon_ver:-unknown})"
     else
         bashio::log.warning "Remote Control daemon start output: ${start_out}"
     fi
