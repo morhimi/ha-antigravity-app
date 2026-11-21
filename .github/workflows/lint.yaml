@@ -168,6 +168,7 @@ jobs:
               "api_port": 8120,
               "default_model": "gemini-4-hydrogen-low",
               "default_timeout": 180,
+              "default_ephemeral": true,
               "ha_mcp_enabled": true,
               "ha_mcp_url": "http://homeassistant:8123/api/mcp",
               "ha_mcp_token": "ci-test-token",
@@ -203,6 +204,7 @@ jobs:
             .status == "ok"
             and .service == "agy-api"
             and .default_timeout == 180
+            and .default_ephemeral == true
             and .authenticated == true
             and (.agy_version | length > 0)
           '

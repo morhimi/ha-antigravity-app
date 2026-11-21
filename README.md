@@ -80,6 +80,7 @@ rest_command:
         }
         | combine({"json_schema": json_schema} if json_schema is defined else {})
         | combine({"conversation_id": conversation_id} if conversation_id is defined else {})
+        | combine({"ephemeral": (ephemeral | bool)} if ephemeral is defined else {})
         | combine({"async": (async | bool)} if async is defined else {})
         | combine({"event_type": event_type} if event_type is defined else {})
         | tojson
@@ -98,7 +99,7 @@ data:
 response_variable: agy_res
 ```
 
-The clean model output is returned in `{{ agy_res['content']['response'] }}`. You can also pass `"json_schema"` for deterministic structured JSON outputs (`agy_res['content']['structured']`), `"conversation_id"` for multi-turn context, or `"async": true` + `"event_type"` for non-blocking `202 Accepted` event callbacks. See the full [App Documentation (`antigravity/DOCS.md`)](./antigravity/DOCS.md) for all configuration options.
+The clean model output is returned in `{{ agy_res['content']['response'] }}`. Single-shot API calls default to `"ephemeral": true` so frequent automations clean up after themselves and do not clutter your interactive conversation history. You can also pass `"ephemeral": false` + `"conversation_id"` for multi-turn context, `"json_schema"` for deterministic structured JSON outputs (`agy_res['content']['structured']`), or `"async": true` + `"event_type"` for non-blocking `202 Accepted` event callbacks. See the full [App Documentation (`antigravity/DOCS.md`)](./antigravity/DOCS.md) for all configuration options.
 
 ### One-Click Camera / Doorbell Blueprint
 

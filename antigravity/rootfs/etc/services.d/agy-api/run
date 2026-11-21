@@ -21,6 +21,7 @@ fi
 api_port="$(bashio::config 'api_port')"
 default_model="$(bashio::config 'default_model')"
 default_timeout="$(bashio::config 'default_timeout')"
+default_ephemeral="$(bashio::config 'default_ephemeral')"
 workspace_dir="$(bashio::config 'workspace_dir')"
 
 if [ -z "${api_port}" ] || [ "${api_port}" = "null" ]; then
@@ -32,6 +33,9 @@ fi
 if [ -z "${default_timeout}" ] || [ "${default_timeout}" = "null" ]; then
     default_timeout="120"
 fi
+if [ -z "${default_ephemeral}" ] || [ "${default_ephemeral}" = "null" ]; then
+    default_ephemeral="true"
+fi
 if [ -z "${workspace_dir}" ] || [ "${workspace_dir}" = "null" ]; then
     workspace_dir="/homeassistant"
 fi
@@ -42,9 +46,10 @@ cd "${workspace_dir}" || exit 1
 export AGY_API_PORT="${api_port}"
 export AGY_DEFAULT_MODEL="${default_model}"
 export AGY_DEFAULT_TIMEOUT="${default_timeout}"
+export AGY_DEFAULT_EPHEMERAL="${default_ephemeral}"
 export AGY_WORKSPACE="${workspace_dir}"
 
 agy_version="$(/usr/local/bin/agy --version 2>/dev/null || echo 'unknown')"
-bashio::log.info "Starting Antigravity REST API bridge on port ${AGY_API_PORT} (model: ${AGY_DEFAULT_MODEL}, timeout: ${AGY_DEFAULT_TIMEOUT}s, agy v${agy_version})..."
+bashio::log.info "Starting Antigravity REST API bridge on port ${AGY_API_PORT} (model: ${AGY_DEFAULT_MODEL}, timeout: ${AGY_DEFAULT_TIMEOUT}s, ephemeral: ${AGY_DEFAULT_EPHEMERAL}, agy v${agy_version})..."
 
 exec python3 /usr/local/bin/agy-api-server.py

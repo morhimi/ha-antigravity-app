@@ -101,7 +101,7 @@ class TestDocsSync(unittest.TestCase):
         self.assertIn(default_model, self.root_readme_text)
         self.assertIn(default_timeout, self.docs_text)
 
-        for param in ("json_schema", "conversation_id", "async", "event_type"):
+        for param in ("json_schema", "conversation_id", "ephemeral", "async", "event_type"):
             self.assertIn(f'"{param}"', self.docs_text, f"rest_command param '{param}' missing from DOCS.md")
             self.assertIn(f'"{param}"', self.root_readme_text, f"rest_command param '{param}' missing from README.md")
 

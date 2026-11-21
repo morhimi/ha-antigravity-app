@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.5
+
+- Added ephemeral single-shot conversation support (`ephemeral` request parameter and `default_ephemeral: true` App option / `AGY_DEFAULT_EPHEMERAL`) to `agy-api-server.py` (`POST /api/generate` and `POST /api/v1/vision`), cleaning up temporary `conversations/<id>.db*`, `brain/<id>/`, `annotations/<id>.pbtxt`, and `conversation_summaries.db` rows off the event loop for both sync and async calls while protecting explicitly resumed `conversation_id` sessions.
+- Added orphaned ghost-summary and annotation pruning on `agy-api` startup and via `POST /api/cleanup-orphans` so previously evicted conversations no longer appear as broken entries in the UI.
+
 ## 1.5.4
 
 - Tracked the active `/data/bin/agy` binary (`inode:mtime` and version) in `agy-remote` so background self-updates or manual `agy update` runs automatically restart only the `agy remote-control` daemon without requiring a full Home Assistant App restart, and promoted newer binaries written to `/root/.local/bin/agy` into `/data/bin/agy`.

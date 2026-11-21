@@ -7,11 +7,13 @@ import asyncio
 import importlib.util
 import json
 import os
+import sqlite3
 import stat
 import tempfile
 import unittest
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -32,7 +34,9 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.temp_path = Path(self.temp_dir.name)
         self.media_dir = self.temp_path / "media"
         self.media_dir.mkdir()
-        self.state_file = self.temp_path / "antigravity_state.pbtxt"
+        self.cli_data_dir = self.temp_path / "cli_data"
+        self.cli_data_dir.mkdir()
+        self.state_file = self.cli_data_dir / "antigravity_state.pbtxt"
         self.mock_agy = self.temp_path / "mock-agy"
 
         self.received_events: list[tuple[str, str, dict]] = []
@@ -100,6 +104,30 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
             "if 'SIMULATE_STRUCTURED_FALLBACK' in prompt:\n"
             "    print(json.dumps({'response': json.dumps({'person_detected': True})}))\n"
             "    sys.exit(0)\n"
+            "if 'SIMULATE_EPHEMERAL_ARTIFACTS' in prompt:\n"
+            "    import sqlite3, uuid\n"
+            "    cid = args[args.index('--conversation') + 1] if '--conversation' in args else str(uuid.uuid4())\n"
+            "    base = pathlib.Path(os.environ['AGY_CLI_DATA_DIR'])\n"
+            "    for sub in ('conversations', 'brain', 'annotations'):\n"
+            "        (base / sub).mkdir(parents=True, exist_ok=True)\n"
+            "    for suf in ('.db', '.db-wal', '.db-shm'):\n"
+            "        (base / 'conversations' / f'{cid}{suf}').write_text('data')\n"
+            "    (base / 'brain' / cid).mkdir(parents=True, exist_ok=True)\n"
+            "    (base / 'brain' / cid / 'notes.md').write_text('artifact')\n"
+            "    (base / 'annotations' / f'{cid}.pbtxt').write_text('ann')\n"
+            "    conn = sqlite3.connect(str(base / 'conversation_summaries.db'))\n"
+            "    conn.execute('CREATE TABLE IF NOT EXISTS conversation_summaries (conversation_id TEXT, title TEXT)')\n"
+            "    conn.execute('CREATE TABLE IF NOT EXISTS conversations_fts (conversation_id TEXT, body TEXT)')\n"
+            "    conn.execute(\n"
+            "        'CREATE TABLE IF NOT EXISTS conversation_parents (conversation_id TEXT, parent_id TEXT)'\n"
+            "    )\n"
+            "    conn.execute('INSERT INTO conversation_summaries VALUES (?, ?)', (cid, 'title'))\n"
+            "    conn.execute('INSERT INTO conversations_fts VALUES (?, ?)', (cid, 'body'))\n"
+            "    conn.execute('INSERT INTO conversation_parents VALUES (?, ?)', (cid, ''))\n"
+            "    conn.commit()\n"
+            "    conn.close()\n"
+            "    print(json.dumps({'conversation_id': cid, 'response': 'artifact-ok'}))\n"
+            "    sys.exit(0)\n"
             "payload = {\n"
             "    'conversation_id': 'conv-test-123',\n"
             "    'response': json.dumps({'args': args, 'prompt': prompt}),\n"
@@ -116,6 +144,8 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         os.environ["AGY_WORKSPACE"] = str(self.temp_path)
         os.environ["AGY_MEDIA_DIR"] = str(self.media_dir)
         os.environ["AGY_STATE_FILE"] = str(self.state_file)
+        os.environ["AGY_CLI_DATA_DIR"] = str(self.cli_data_dir)
+        os.environ["AGY_DEFAULT_EPHEMERAL"] = "true"
         os.environ["AGY_HA_API_URL"] = f"http://127.0.0.1:{ha_port}/api"
         os.environ["SUPERVISOR_TOKEN"] = "test-supervisor-token"
         os.environ.pop("GEMINI_API_KEY", None)
@@ -192,6 +222,7 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["service"], "agy-api")
         self.assertEqual(body["default_model"], "gemini-4-hydrogen-low")
         self.assertEqual(body["default_timeout"], 180)
+        self.assertTrue(body["default_ephemeral"])
         self.assertFalse(body["authenticated"])
         self.assertEqual(body["agy_version"], "1.5.7")
 
@@ -292,7 +323,27 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ev_body["status"], "success")
         self.assertEqual(ev_body["request_id"], "req-abc-1")
         self.assertEqual(ev_body["metadata"], {"camera": "backyard"})
-        self.assertEqual(ev_body["conversation_id"], "conv-test-123")
+        self.assertTrue(ev_body["ephemeral"])
+        self.assertNotIn("conversation_id", ev_body)
+
+        # Async with ephemeral=False preserves conversation_id
+        self.event_received.clear()
+        status_persist, body_persist = await self._request(
+            "POST",
+            "/api/generate",
+            {
+                "prompt": "Analyze backyard clip persistent",
+                "async": True,
+                "ephemeral": False,
+                "event_type": "agy_camera_done",
+                "request_id": "req-abc-2",
+            },
+        )
+        self.assertEqual(status_persist, 202)
+        self.assertFalse(body_persist["ephemeral"])
+        await asyncio.wait_for(self.event_received.wait(), timeout=5)
+        self.assertEqual(self.received_events[1][2]["conversation_id"], "conv-test-123")
+        self.assertNotIn("ephemeral", self.received_events[1][2])
 
         # Unsafe event_type rejected with 400
         status_bad, body_bad = await self._request(
@@ -438,6 +489,115 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 500)
         self.assertEqual(body["status"], "error")
         self.assertIn("simulated agy cli failure", body["message"])
+
+    def _seed_conversation(self, cid: str, create_db: bool = True, create_annotation: bool = True) -> None:
+        for sub in ("conversations", "brain", "annotations"):
+            (self.cli_data_dir / sub).mkdir(parents=True, exist_ok=True)
+        if create_db:
+            for suf in (".db", ".db-wal", ".db-shm"):
+                (self.cli_data_dir / "conversations" / f"{cid}{suf}").write_text("db", encoding="utf-8")
+            (self.cli_data_dir / "brain" / cid).mkdir(parents=True, exist_ok=True)
+            (self.cli_data_dir / "brain" / cid / "plan.md").write_text("plan", encoding="utf-8")
+        if create_annotation:
+            (self.cli_data_dir / "annotations" / f"{cid}.pbtxt").write_text("ann", encoding="utf-8")
+        conn = sqlite3.connect(str(self.cli_data_dir / "conversation_summaries.db"))
+        conn.execute("CREATE TABLE IF NOT EXISTS conversation_summaries (conversation_id TEXT, title TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS conversations_fts (conversation_id TEXT, body TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS conversation_parents (conversation_id TEXT, parent_id TEXT)")
+        conn.execute("INSERT INTO conversation_summaries VALUES (?, ?)", (cid, f"title-{cid}"))
+        conn.execute("INSERT INTO conversations_fts VALUES (?, ?)", (cid, f"body-{cid}"))
+        conn.execute("INSERT INTO conversation_parents VALUES (?, ?)", (cid, ""))
+        conn.commit()
+        conn.close()
+
+    def _summary_ids(self, table: str) -> set[str]:
+        conn = sqlite3.connect(str(self.cli_data_dir / "conversation_summaries.db"))
+        try:
+            return {row[0] for row in conn.execute(f"SELECT conversation_id FROM {table}").fetchall()}
+        finally:
+            conn.close()
+
+    async def test_ephemeral_cleanup_removes_files_and_sqlite_rows_for_sync_and_vision(self) -> None:
+        keep_cid = str(uuid.uuid4())
+        self._seed_conversation(keep_cid)
+
+        for route in ("/api/generate", "/api/v1/vision"):
+            status, body = await self._request(
+                "POST",
+                route,
+                {"prompt": "SIMULATE_EPHEMERAL_ARTIFACTS"},
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(body["response"], "artifact-ok")
+            self.assertTrue(body["ephemeral"])
+            self.assertNotIn("conversation_id", body)
+
+        # Only the pre-existing interactive conversation should remain
+        remaining_dbs = sorted(p.name for p in (self.cli_data_dir / "conversations").iterdir())
+        self.assertEqual(remaining_dbs, [f"{keep_cid}.db", f"{keep_cid}.db-shm", f"{keep_cid}.db-wal"])
+        self.assertEqual([p.name for p in (self.cli_data_dir / "brain").iterdir()], [keep_cid])
+        self.assertEqual([p.name for p in (self.cli_data_dir / "annotations").iterdir()], [f"{keep_cid}.pbtxt"])
+        for table in ("conversation_summaries", "conversations_fts", "conversation_parents"):
+            self.assertEqual(self._summary_ids(table), {keep_cid})
+
+    async def test_ephemeral_guard_and_validation(self) -> None:
+        # 1. Explicit conversation_id is NEVER treated as ephemeral even when ephemeral=True
+        resumed_cid = str(uuid.uuid4())
+        status, body = await self._request(
+            "POST",
+            "/api/generate",
+            {"prompt": "SIMULATE_EPHEMERAL_ARTIFACTS", "conversation_id": resumed_cid, "ephemeral": True},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["conversation_id"], resumed_cid)
+        self.assertNotIn("ephemeral", body)
+        self.assertTrue((self.cli_data_dir / "conversations" / f"{resumed_cid}.db").exists())
+        self.assertIn(resumed_cid, self._summary_ids("conversation_summaries"))
+
+        # 2. Explicit ephemeral=False persists a new conversation and returns conversation_id
+        status2, body2 = await self._request(
+            "POST",
+            "/api/generate",
+            {"prompt": "SIMULATE_EPHEMERAL_ARTIFACTS", "ephemeral": "false"},
+        )
+        self.assertEqual(status2, 200)
+        new_cid = body2["conversation_id"]
+        self.assertNotIn("ephemeral", body2)
+        self.assertTrue((self.cli_data_dir / "conversations" / f"{new_cid}.db").exists())
+
+        # 3. Invalid ephemeral value -> 400
+        status3, body3 = await self._request(
+            "POST",
+            "/api/generate",
+            {"prompt": "Hello", "ephemeral": "maybe"},
+        )
+        self.assertEqual(status3, 400)
+        self.assertIn("Invalid 'ephemeral'", body3["message"])
+
+        # 4. Non-UUID / path traversal IDs are rejected by cleanup helper
+        self.assertFalse(self.srv_mod._cleanup_ephemeral_conversation_sync("../escape", str(self.cli_data_dir)))
+        self.assertFalse(self.srv_mod._cleanup_ephemeral_conversation_sync("conv-test-123", str(self.cli_data_dir)))
+
+    async def test_cleanup_orphans_endpoint_prunes_ghost_summaries_and_annotations(self) -> None:
+        live_cid = str(uuid.uuid4())
+        ghost_cid_1 = str(uuid.uuid4())
+        ghost_cid_2 = str(uuid.uuid4())
+        self._seed_conversation(live_cid, create_db=True, create_annotation=True)
+        self._seed_conversation(ghost_cid_1, create_db=False, create_annotation=True)
+        self._seed_conversation(ghost_cid_2, create_db=False, create_annotation=False)
+
+        status, body = await self._request("POST", "/api/cleanup-orphans")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "ok")
+        self.assertEqual(body["orphaned_conversations"], 2)
+        self.assertEqual(body["removed_rows"], 6)
+        self.assertEqual(body["removed_annotations"], 1)
+
+        self.assertTrue((self.cli_data_dir / "conversations" / f"{live_cid}.db").exists())
+        self.assertTrue((self.cli_data_dir / "annotations" / f"{live_cid}.pbtxt").exists())
+        self.assertFalse((self.cli_data_dir / "annotations" / f"{ghost_cid_1}.pbtxt").exists())
+        for table in ("conversation_summaries", "conversations_fts", "conversation_parents"):
+            self.assertEqual(self._summary_ids(table), {live_cid})
 
     async def test_semaphore_limits_concurrency_to_two(self) -> None:
         results = await asyncio.gather(

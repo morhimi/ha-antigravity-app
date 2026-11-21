@@ -47,6 +47,12 @@ configuration:
     description: >-
       Default timeout in seconds for REST API inference requests when
       timeout is omitted in the payload (10–600, defaults to 120).
+  default_ephemeral:
+    name: Ephemeral Single-Shot REST API Calls
+    description: >-
+      Automatically clean up temporary conversation files and summary rows
+      created by single-shot REST API requests (when conversation_id is omitted)
+      so automation calls do not evict interactive user conversations.
   ha_mcp_enabled:
     name: Configure Home Assistant MCP Server
     description: >-
