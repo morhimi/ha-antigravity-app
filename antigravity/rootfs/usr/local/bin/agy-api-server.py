@@ -11,10 +11,14 @@ import os
 import re
 import shutil
 import sqlite3
+import sys
+import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
 import uuid
+from collections.abc import Callable
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,6 +62,8 @@ BACKGROUND_TASKS: set[asyncio.Task] = set()
 EVENT_TYPE_RE = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 SUMMARY_TABLES = ("conversation_summaries", "conversations_fts", "conversation_parents")
+PROTO_SUMMARY_FILES = ("jetbox_summaries_proto.pb", "agyhub_summaries_proto.pb")
+PROTO_LOCK = threading.Lock()
 _VERSION_CACHE: tuple[str, float, str] | None = None
 
 
@@ -143,6 +149,135 @@ def _parse_cli_json_output(raw_stdout: str, expect_structured: bool = False) -> 
     return raw_stdout.strip(), {}, {}
 
 
+def _read_varint(buf: bytes, pos: int) -> tuple[int, int]:
+    result = 0
+    shift = 0
+    n = len(buf)
+    while pos < n:
+        byte = buf[pos]
+        pos += 1
+        result |= (byte & 0x7F) << shift
+        if not (byte & 0x80):
+            return result, pos
+        shift += 7
+        if shift > 63:
+            raise ValueError("Protobuf varint overflow")
+    raise ValueError("Truncated protobuf varint")
+
+
+def _skip_proto_field(buf: bytes, pos: int, wire_type: int) -> int:
+    n = len(buf)
+    if wire_type == 0:
+        _, pos = _read_varint(buf, pos)
+        return pos
+    if wire_type == 1:
+        if pos + 8 > n:
+            raise ValueError("Truncated 64-bit protobuf field")
+        return pos + 8
+    if wire_type == 2:
+        length, pos = _read_varint(buf, pos)
+        if pos + length > n:
+            raise ValueError("Truncated length-delimited protobuf field")
+        return pos + length
+    if wire_type == 5:
+        if pos + 4 > n:
+            raise ValueError("Truncated 32-bit protobuf field")
+        return pos + 4
+    raise ValueError(f"Unsupported protobuf wire_type: {wire_type}")
+
+
+def _extract_entry_conversation_id(entry_bytes: bytes) -> str | None:
+    """Extract inner field 1 (wire_type=2) UTF-8 conversation_id from a protobuf map entry."""
+    pos = 0
+    n = len(entry_bytes)
+    while pos < n:
+        tag, pos = _read_varint(entry_bytes, pos)
+        field_num = tag >> 3
+        wire_type = tag & 0x07
+        if field_num == 1 and wire_type == 2:
+            length, pos = _read_varint(entry_bytes, pos)
+            if pos + length > n:
+                raise ValueError("Truncated inner conversation_id field")
+            return entry_bytes[pos : pos + length].decode("utf-8", errors="strict")
+        pos = _skip_proto_field(entry_bytes, pos, wire_type)
+    return None
+
+
+def _filter_proto_summary_file_sync(pb_path: str, should_remove: Callable[[str], bool]) -> int:
+    """Atomically filter matching top-level field-1 map entries out of a protobuf summary cache."""
+    if not os.path.isfile(pb_path):
+        return 0
+
+    with PROTO_LOCK:
+        if not os.path.isfile(pb_path):
+            return 0
+        try:
+            st_mode = os.stat(pb_path).st_mode
+            with open(pb_path, "rb") as fh:
+                raw = fh.read()
+        except OSError as err:
+            logger.warning("Failed reading protobuf summary cache %s: %s", pb_path, err)
+            return 0
+
+        if not raw:
+            return 0
+
+        kept_chunks: list[bytes] = []
+        removed = 0
+        pos = 0
+        n = len(raw)
+        try:
+            while pos < n:
+                field_start = pos
+                tag, pos = _read_varint(raw, pos)
+                field_num = tag >> 3
+                wire_type = tag & 0x07
+                if field_num == 1 and wire_type == 2:
+                    length, payload_start = _read_varint(raw, pos)
+                    field_end = payload_start + length
+                    if field_end > n:
+                        raise ValueError("Truncated top-level protobuf entry")
+                    entry_cid = _extract_entry_conversation_id(raw[payload_start:field_end])
+                    if entry_cid is not None and should_remove(entry_cid):
+                        removed += 1
+                    else:
+                        kept_chunks.append(raw[field_start:field_end])
+                    pos = field_end
+                else:
+                    field_end = _skip_proto_field(raw, pos, wire_type)
+                    kept_chunks.append(raw[field_start:field_end])
+                    pos = field_end
+        except (ValueError, UnicodeDecodeError) as err:
+            logger.warning("Skipping protobuf filter for %s (parse error: %s)", pb_path, err)
+            return 0
+
+        if removed == 0:
+            return 0
+
+        parent_dir = os.path.dirname(pb_path) or "."
+        tmp_path: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=parent_dir, prefix=".tmp_pb_", delete=False) as tmp_fh:
+                tmp_path = tmp_fh.name
+                tmp_fh.write(b"".join(kept_chunks))
+                tmp_fh.flush()
+                os.fsync(tmp_fh.fileno())
+            os.chmod(tmp_path, st_mode)
+            os.replace(tmp_path, pb_path)
+            tmp_path = None
+        except OSError as err:
+            logger.warning("Failed writing filtered protobuf summary cache %s: %s", pb_path, err)
+            return 0
+        finally:
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+        return removed
+
+
 def _cleanup_ephemeral_conversation_sync(conversation_id: str, cli_data_dir: str = CLI_DATA_DIR) -> bool:
     """Remove all on-disk and SQLite traces of an ephemeral single-shot conversation."""
     if not UUID_RE.match(conversation_id):
@@ -189,14 +324,25 @@ def _cleanup_ephemeral_conversation_sync(conversation_id: str, cli_data_dir: str
             if conn is not None:
                 conn.close()
 
+    for pb_name in PROTO_SUMMARY_FILES:
+        _filter_proto_summary_file_sync(
+            os.path.join(cli_data_dir, pb_name),
+            lambda cid: cid == conversation_id,
+        )
+
     return True
 
 
 def _prune_orphaned_summaries_sync(cli_data_dir: str = CLI_DATA_DIR) -> dict:
-    """Remove ghost summary rows and annotations whose conversations/<id>.db no longer exists."""
+    """Remove ghost summary rows, annotations, and protobuf cache entries missing conversations/<id>.db."""
     conv_dir = os.path.join(cli_data_dir, "conversations")
     if not os.path.isdir(conv_dir):
-        return {"orphaned_conversations": 0, "removed_rows": 0, "removed_annotations": 0}
+        return {
+            "orphaned_conversations": 0,
+            "removed_rows": 0,
+            "removed_annotations": 0,
+            "removed_proto_entries": 0,
+        }
 
     existing_ids: set[str] = set()
     try:
@@ -207,7 +353,12 @@ def _prune_orphaned_summaries_sync(cli_data_dir: str = CLI_DATA_DIR) -> dict:
                     existing_ids.add(cid)
     except OSError as err:
         logger.warning("Failed scanning conversations directory %s: %s", conv_dir, err)
-        return {"orphaned_conversations": 0, "removed_rows": 0, "removed_annotations": 0}
+        return {
+            "orphaned_conversations": 0,
+            "removed_rows": 0,
+            "removed_annotations": 0,
+            "removed_proto_entries": 0,
+        }
 
     removed_annotations = 0
     ann_dir = os.path.join(cli_data_dir, "annotations")
@@ -264,10 +415,18 @@ def _prune_orphaned_summaries_sync(cli_data_dir: str = CLI_DATA_DIR) -> dict:
             if conn is not None:
                 conn.close()
 
+    removed_proto_entries = 0
+    for pb_name in PROTO_SUMMARY_FILES:
+        removed_proto_entries += _filter_proto_summary_file_sync(
+            os.path.join(cli_data_dir, pb_name),
+            lambda cid: bool(UUID_RE.match(cid)) and cid not in existing_ids,
+        )
+
     return {
         "orphaned_conversations": len(orphan_ids),
         "removed_rows": removed_rows,
         "removed_annotations": removed_annotations,
+        "removed_proto_entries": removed_proto_entries,
     }
 
 
@@ -731,12 +890,17 @@ class AgyApiServer:
 async def main() -> None:
     try:
         prune_stats = await asyncio.to_thread(_prune_orphaned_summaries_sync)
-        if prune_stats["orphaned_conversations"] or prune_stats["removed_annotations"]:
+        if (
+            prune_stats["orphaned_conversations"]
+            or prune_stats["removed_annotations"]
+            or prune_stats["removed_proto_entries"]
+        ):
             logger.info(
-                "Pruned %d orphaned conversation summaries (%d rows) and %d orphan annotations on startup.",
+                "Pruned %d orphaned summaries (%d rows), %d annotations, and %d protobuf entries on startup.",
                 prune_stats["orphaned_conversations"],
                 prune_stats["removed_rows"],
                 prune_stats["removed_annotations"],
+                prune_stats["removed_proto_entries"],
             )
     except Exception:
         logger.warning("Startup orphan summary pruning failed cleanly", exc_info=True)
@@ -759,4 +923,7 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    if "--prune-orphans" in sys.argv[1:]:
+        print(json.dumps(_prune_orphaned_summaries_sync()))
+        sys.exit(0)
     asyncio.run(main())

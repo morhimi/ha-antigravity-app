@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.6
+
+- Updated `_cleanup_ephemeral_conversation_sync` and `_prune_orphaned_summaries_sync` in `agy-api-server.py` to atomically filter matching entries out of `jetbox_summaries_proto.pb` and `agyhub_summaries_proto.pb` so `agy` summary reconciliation cannot restore deleted ephemeral or ghost conversations back into `conversation_summaries.db`.
+- Executed orphan summary pruning (`agy-api-server.py --prune-orphans`) inside `10-init-antigravity.sh` on container boot before S6 starts `agy-remote`, ensuring `agy remote-control serve` loads only valid existing conversations into memory.
+
 ## 1.5.5
 
 - Added ephemeral single-shot conversation support (`ephemeral` request parameter and `default_ephemeral: true` App option / `AGY_DEFAULT_EPHEMERAL`) to `agy-api-server.py` (`POST /api/generate` and `POST /api/v1/vision`), cleaning up temporary `conversations/<id>.db*`, `brain/<id>/`, `annotations/<id>.pbtxt`, and `conversation_summaries.db` rows off the event loop for both sync and async calls while protecting explicitly resumed `conversation_id` sessions.

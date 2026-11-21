@@ -55,6 +55,15 @@ if [ ! -f /data/.gitconfig ]; then
 fi
 ln -sfn /data/.gitconfig /root/.gitconfig
 
+# 2b. Prune orphaned ghost summaries (SQLite, annotations, and protobuf caches)
+#     before S6 starts agy-remote so it loads only valid conversations into memory.
+if [ -x /usr/local/bin/agy-api-server.py ] && [ -d /data/.gemini/antigravity-cli/conversations ]; then
+    prune_out="$(python3 /usr/local/bin/agy-api-server.py --prune-orphans 2>/dev/null || true)"
+    if [ -n "${prune_out}" ]; then
+        bashio::log.info "Startup orphan conversation pruning: ${prune_out}"
+    fi
+fi
+
 # 3. Ensure /config symlink points to /homeassistant for convenience
 if [ -d /homeassistant ] && [ ! -e /config ]; then
     ln -sfn /homeassistant /config

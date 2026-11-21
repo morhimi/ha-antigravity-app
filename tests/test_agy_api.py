@@ -9,6 +9,8 @@ import json
 import os
 import sqlite3
 import stat
+import subprocess
+import sys
 import tempfile
 import unittest
 import urllib.error
@@ -18,6 +20,28 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SERVER_SCRIPT = REPO_ROOT / "antigravity" / "rootfs" / "usr" / "local" / "bin" / "agy-api-server.py"
+
+
+def _encode_varint(val: int) -> bytes:
+    out = bytearray()
+    while True:
+        byte = val & 0x7F
+        val >>= 7
+        if val:
+            out.append(byte | 0x80)
+        else:
+            out.append(byte)
+            return bytes(out)
+
+
+def _encode_proto_entry(cid: str, summary: str = "summary") -> bytes:
+    cid_bytes = cid.encode("utf-8")
+    sum_bytes = summary.encode("utf-8")
+    inner = (
+        b"\x0a" + _encode_varint(len(cid_bytes)) + cid_bytes
+        + b"\x12" + _encode_varint(len(sum_bytes)) + sum_bytes
+    )
+    return b"\x0a" + _encode_varint(len(inner)) + inner
 
 
 def load_server_module():
@@ -126,6 +150,12 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
             "    conn.execute('INSERT INTO conversation_parents VALUES (?, ?)', (cid, ''))\n"
             "    conn.commit()\n"
             "    conn.close()\n"
+            "    cid_b = cid.encode('utf-8')\n"
+            "    inner = b'\\x0a' + bytes([len(cid_b)]) + cid_b + b'\\x12\\x03sum'\n"
+            "    pb_entry = b'\\x0a' + bytes([len(inner)]) + inner\n"
+            "    for pb_name in ('jetbox_summaries_proto.pb', 'agyhub_summaries_proto.pb'):\n"
+            "        with open(base / pb_name, 'ab') as pb_fh:\n"
+            "            pb_fh.write(pb_entry)\n"
             "    print(json.dumps({'conversation_id': cid, 'response': 'artifact-ok'}))\n"
             "    sys.exit(0)\n"
             "payload = {\n"
@@ -509,6 +539,30 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         conn.execute("INSERT INTO conversation_parents VALUES (?, ?)", (cid, ""))
         conn.commit()
         conn.close()
+        pb_entry = _encode_proto_entry(cid, f"sum-{cid}")
+        for pb_name in ("jetbox_summaries_proto.pb", "agyhub_summaries_proto.pb"):
+            pb_path = self.cli_data_dir / pb_name
+            prefix = b"\x10\x2a" if not pb_path.exists() else b""
+            with open(pb_path, "ab") as pb_fh:
+                pb_fh.write(prefix + pb_entry)
+
+    def _proto_ids(self, pb_name: str) -> list[str]:
+        pb_path = self.cli_data_dir / pb_name
+        raw = pb_path.read_bytes()
+        ids: list[str] = []
+        pos = 0
+        while pos < len(raw):
+            tag, pos = self.srv_mod._read_varint(raw, pos)
+            wire_type = tag & 0x07
+            if (tag >> 3) == 1 and wire_type == 2:
+                length, pos = self.srv_mod._read_varint(raw, pos)
+                cid = self.srv_mod._extract_entry_conversation_id(raw[pos : pos + length])
+                if cid is not None:
+                    ids.append(cid)
+                pos += length
+            else:
+                pos = self.srv_mod._skip_proto_field(raw, pos, wire_type)
+        return ids
 
     def _summary_ids(self, table: str) -> set[str]:
         conn = sqlite3.connect(str(self.cli_data_dir / "conversation_summaries.db"))
@@ -532,13 +586,17 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(body["ephemeral"])
             self.assertNotIn("conversation_id", body)
 
-        # Only the pre-existing interactive conversation should remain
+        # Only the pre-existing interactive conversation should remain across DBs, annotations, and protobuf caches
         remaining_dbs = sorted(p.name for p in (self.cli_data_dir / "conversations").iterdir())
         self.assertEqual(remaining_dbs, [f"{keep_cid}.db", f"{keep_cid}.db-shm", f"{keep_cid}.db-wal"])
         self.assertEqual([p.name for p in (self.cli_data_dir / "brain").iterdir()], [keep_cid])
         self.assertEqual([p.name for p in (self.cli_data_dir / "annotations").iterdir()], [f"{keep_cid}.pbtxt"])
         for table in ("conversation_summaries", "conversations_fts", "conversation_parents"):
             self.assertEqual(self._summary_ids(table), {keep_cid})
+        for pb_name in ("jetbox_summaries_proto.pb", "agyhub_summaries_proto.pb"):
+            self.assertEqual(self._proto_ids(pb_name), [keep_cid])
+            # Unrelated top-level field 2 (0x10 0x2a) must remain preserved verbatim
+            self.assertTrue((self.cli_data_dir / pb_name).read_bytes().startswith(b"\x10\x2a"))
 
     async def test_ephemeral_guard_and_validation(self) -> None:
         # 1. Explicit conversation_id is NEVER treated as ephemeral even when ephemeral=True
@@ -592,12 +650,44 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["orphaned_conversations"], 2)
         self.assertEqual(body["removed_rows"], 6)
         self.assertEqual(body["removed_annotations"], 1)
+        self.assertEqual(body["removed_proto_entries"], 4)
 
         self.assertTrue((self.cli_data_dir / "conversations" / f"{live_cid}.db").exists())
         self.assertTrue((self.cli_data_dir / "annotations" / f"{live_cid}.pbtxt").exists())
         self.assertFalse((self.cli_data_dir / "annotations" / f"{ghost_cid_1}.pbtxt").exists())
         for table in ("conversation_summaries", "conversations_fts", "conversation_parents"):
             self.assertEqual(self._summary_ids(table), {live_cid})
+        for pb_name in ("jetbox_summaries_proto.pb", "agyhub_summaries_proto.pb"):
+            self.assertEqual(self._proto_ids(pb_name), [live_cid])
+
+    def test_cli_prune_orphans_and_corrupt_proto_safety(self) -> None:
+        live_cid = str(uuid.uuid4())
+        ghost_cid = str(uuid.uuid4())
+        self._seed_conversation(live_cid, create_db=True, create_annotation=True)
+        self._seed_conversation(ghost_cid, create_db=False, create_annotation=True)
+
+        corrupt_pb = self.cli_data_dir / "agyhub_summaries_proto.pb"
+        corrupt_bytes = b"\x0a\x99\x01truncated"
+        corrupt_pb.write_bytes(corrupt_bytes)
+
+        env = os.environ.copy()
+        env["AGY_CLI_DATA_DIR"] = str(self.cli_data_dir)
+        proc = subprocess.run(
+            [sys.executable, str(SERVER_SCRIPT), "--prune-orphans"],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=10,
+            check=True,
+        )
+        summary = json.loads(proc.stdout.strip())
+        self.assertEqual(summary["orphaned_conversations"], 1)
+        self.assertEqual(summary["removed_rows"], 3)
+        self.assertEqual(summary["removed_annotations"], 1)
+        self.assertEqual(summary["removed_proto_entries"], 1)
+        self.assertEqual(self._proto_ids("jetbox_summaries_proto.pb"), [live_cid])
+        # Corrupt protobuf file is skipped without error or modification
+        self.assertEqual(corrupt_pb.read_bytes(), corrupt_bytes)
 
     async def test_semaphore_limits_concurrency_to_two(self) -> None:
         results = await asyncio.gather(
