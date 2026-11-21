@@ -9,6 +9,10 @@ on:
       publish:
         required: true
         type: boolean
+      ref:
+        required: false
+        type: string
+        default: ""
 
 jobs:
   prepare:
@@ -26,6 +30,8 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Get app information
         id: info
@@ -74,6 +80,7 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Build image
@@ -108,6 +115,8 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Publish multi-arch manifest
         uses: home-assistant/builder/actions/publish-multi-arch-manifest@2026.09.0
@@ -125,6 +134,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.prepare.outputs.version }}
           APP_PATH: "./${{ inputs.app }}"
+          TARGET_REF: ${{ inputs.ref }}
         run: |
           tag="v${VERSION}"
           if ! gh release view "${tag}" >/dev/null 2>&1; then
@@ -132,5 +142,9 @@ jobs:
             if [[ -z "${notes}" ]]; then
               notes="Release ${tag}"
             fi
-            gh release create "${tag}" --title "${tag}" --notes "${notes}"
+            if [[ -n "${TARGET_REF}" ]]; then
+              gh release create "${tag}" --target "${TARGET_REF}" --title "${tag}" --notes "${notes}"
+            else
+              gh release create "${tag}" --title "${tag}" --notes "${notes}"
+            fi
           fi

@@ -7,7 +7,11 @@ on:
   pull_request:
     branches:
       - main
-  push:
+  workflow_run:
+    workflows:
+      - "Lint, Security & Smoke Test"
+    types:
+      - completed
     branches:
       - main
   workflow_dispatch:
@@ -22,6 +26,12 @@ permissions:
 jobs:
   init:
     name: Initialize builds
+    if: >-
+      github.event_name != 'workflow_run' || (
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.conclusion == 'success'
+      )
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.filter.outputs.changed }}
@@ -29,11 +39,21 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
+          fetch-depth: ${{ github.event_name == 'workflow_run' && 2 || 1 }}
 
       - name: Get changed files
         id: changed_files
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name == 'pull_request'
         uses: tj-actions/changed-files@v47.0.6
+
+      - name: Get changed files (workflow_run)
+        id: changed_files_run
+        if: github.event_name == 'workflow_run'
+        run: |
+          files="$(git diff-tree --no-commit-id --name-only -r HEAD | tr '\n' ' ')"
+          echo "all_changed_files=${files}" >> "$GITHUB_OUTPUT"
 
       - name: Find app directories
         id: apps
@@ -43,7 +63,9 @@ jobs:
         id: filter
         env:
           APPS: ${{ steps.apps.outputs.addons }}
-          CHANGED_FILES: ${{ steps.changed_files.outputs.all_changed_files }}
+          CHANGED_FILES: >-
+            ${{ steps.changed_files.outputs.all_changed_files ||
+            steps.changed_files_run.outputs.all_changed_files }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           # shellcheck disable=SC2086
@@ -87,7 +109,10 @@ jobs:
     uses: ./.github/workflows/build-app.yaml
     with:
       app: ${{ matrix.app }}
+      ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
       publish: >-
-        ${{ github.ref == 'refs/heads/main' &&
-        (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+        ${{ (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.conclusion == 'success') ||
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
     secrets: inherit
