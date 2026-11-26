@@ -439,6 +439,7 @@ async def run_agy_inference(
     json_schema: str | None = None,
     conversation_id: str | None = None,
     ephemeral: bool = False,
+    disable_slash_commands: bool = True,
 ) -> dict:
     start_time = time.time()
     effective_ephemeral = bool(ephemeral) and not bool(conversation_id)
@@ -464,7 +465,11 @@ async def run_agy_inference(
         "--dangerously-skip-permissions",
         "--output-format",
         "json",
+        "--print-timeout",
+        f"{timeout}s",
     ]
+    if disable_slash_commands:
+        cmd.append("--disable-slash-commands")
     if clean_files and MEDIA_DIR and os.path.isdir(MEDIA_DIR):
         cmd.extend(["--add-dir", MEDIA_DIR])
     if json_schema:
@@ -477,6 +482,7 @@ async def run_agy_inference(
     env["HOME"] = "/root"
 
     cwd = WORKSPACE if os.path.isdir(WORKSPACE) else "/root"
+    hard_timeout = timeout + 5 if timeout >= 10 else timeout
 
     async with SEMAPHORE:
         proc = await asyncio.create_subprocess_exec(
@@ -487,7 +493,7 @@ async def run_agy_inference(
             env=env,
         )
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=hard_timeout)
         except TimeoutError as err:
             proc.kill()
             await proc.wait()
@@ -503,6 +509,9 @@ async def run_agy_inference(
             err_cid = err_extra.get("conversation_id")
             if err_cid:
                 await asyncio.to_thread(_cleanup_ephemeral_conversation_sync, err_cid)
+        combined_err = f"{err_text}\n{raw_stdout}".lower()
+        if any(tok in combined_err for tok in ("timed out", "deadline exceeded", "print-timeout")):
+            raise TimeoutError(f"agy process timed out after {timeout} seconds")
         raise RuntimeError(f"agy exited with code {proc.returncode}: {err_text or raw_stdout}")
 
     response_text, usage_data, extra = _parse_cli_json_output(raw_stdout, expect_structured=bool(json_schema))
@@ -563,6 +572,7 @@ async def _run_async_and_emit(
     conversation_id: str | None,
     metadata: dict | None,
     ephemeral: bool = False,
+    disable_slash_commands: bool = True,
 ) -> None:
     try:
         result = await run_agy_inference(
@@ -574,6 +584,7 @@ async def _run_async_and_emit(
             json_schema=json_schema,
             conversation_id=conversation_id,
             ephemeral=ephemeral,
+            disable_slash_commands=disable_slash_commands,
         )
         event_payload = {**result, "request_id": request_id}
     except (RuntimeError, TimeoutError, OSError, ValueError) as err:
@@ -757,6 +768,16 @@ class AgyApiServer:
                 ephemeral = False if conversation_id else requested_ephemeral
 
                 try:
+                    disable_slash_commands = _parse_bool_flag(data.get("disable_slash_commands"), default=True)
+                except ValueError:
+                    await _send_json(
+                        writer,
+                        "400 Bad Request",
+                        {"status": "error", "message": "Invalid 'disable_slash_commands': must be a boolean"},
+                    )
+                    return
+
+                try:
                     timeout = int(data.get("timeout") or DEFAULT_TIMEOUT)
                     if timeout <= 0:
                         raise ValueError("timeout must be positive")
@@ -808,6 +829,7 @@ class AgyApiServer:
                             conversation_id=conversation_id,
                             metadata=raw_meta,
                             ephemeral=ephemeral,
+                            disable_slash_commands=disable_slash_commands,
                         )
                     )
                     BACKGROUND_TASKS.add(task)
@@ -844,6 +866,7 @@ class AgyApiServer:
                     json_schema=json_schema,
                     conversation_id=conversation_id,
                     ephemeral=ephemeral,
+                    disable_slash_commands=disable_slash_commands,
                 )
                 logger.info(
                     "Inference completed in %.2fs (model=%s)",

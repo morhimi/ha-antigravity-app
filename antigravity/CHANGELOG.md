@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.7
+
+- Synchronized `config.yaml`'s `default_model` dropdown (27 models) and `README.md` with `agy 1.5.18`, adding `gemini-4-neon-*`, `gemini-4-carbon-*`, and `gemini-pro-orchestrator-{neon,,argon}` while removing deprecated `gemini-pro-orchestrator-g1-pro`.
+- Updated `agy-api-server.py` to pass `--disable-slash-commands` by default (configurable per request via `disable_slash_commands`) and native `--print-timeout <timeout>s` for graceful timeout shutdown and ephemeral cleanup before the hard process kill backstop.
+
 ## 1.5.6
 
 - Updated `_cleanup_ephemeral_conversation_sync` and `_prune_orphaned_summaries_sync` in `agy-api-server.py` to atomically filter matching entries out of `jetbox_summaries_proto.pb` and `agyhub_summaries_proto.pb` so `agy` summary reconciliation cannot restore deleted ephemeral or ghost conversations back into `conversation_summaries.db`.

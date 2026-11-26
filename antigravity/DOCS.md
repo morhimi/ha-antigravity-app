@@ -66,6 +66,7 @@ rest_command:
         | combine({"json_schema": json_schema} if json_schema is defined else {})
         | combine({"conversation_id": conversation_id} if conversation_id is defined else {})
         | combine({"ephemeral": (ephemeral | bool)} if ephemeral is defined else {})
+        | combine({"disable_slash_commands": (disable_slash_commands | bool)} if disable_slash_commands is defined else {})
         | combine({"async": (async | bool)} if async is defined else {})
         | combine({"event_type": event_type} if event_type is defined else {})
         | combine({"request_id": request_id} if request_id is defined else {})
@@ -81,6 +82,7 @@ The clean model response is returned in `response_variable['content']['response'
 - **Structured JSON Outputs (`json_schema`)**: Pass `"json_schema": {"type": "object", "properties": {"person_detected": {"type": "boolean"}}, "required": ["person_detected"]}` in the payload to receive a parsed `"structured"` JSON object in `agy_res['content']['structured']`.
 - **Conversation Continuity (`conversation_id`) & Ephemeral Calls (`ephemeral`)**: Single-shot requests default to `"ephemeral": true` (controlled by `default_ephemeral`), cleaning up their temporary conversation database, `brain/` directory, annotation, SQLite summary rows, and protobuf summary cache entries (`jetbox_summaries_proto.pb`, `agyhub_summaries_proto.pb`) immediately after inference so frequent automations never hit `agy`'s 500-conversation cap or clutter interactive history. Pass `"ephemeral": false` to persist a new conversation and receive its `"conversation_id"`, or pass `"conversation_id"` from a previous call to resume an ongoing session (`agy --conversation <id>`, which is never treated as ephemeral).
 - **Orphaned Ghost Summary Pruning (`POST /api/cleanup-orphans`)**: On container boot (before `agy-remote` starts) and on demand via `POST http://68eea963-antigravity:8120/api/cleanup-orphans`, `agy-api` prunes stale entries in `conversation_summaries.db`, `annotations/*.pbtxt`, `jetbox_summaries_proto.pb`, and `agyhub_summaries_proto.pb` whose `conversations/<id>.db` no longer exists.
+- **Slash Command Protection & Graceful Timeouts (`disable_slash_commands`, `--print-timeout`)**: REST API calls pass `--disable-slash-commands` by default so automation prompts and `/media/...` paths never accidentally expand slash commands or skills (pass `"disable_slash_commands": false` to opt back in), and pass `--print-timeout <timeout>s` so `agy` can exit cleanly and flush its `conversation_id` for ephemeral cleanup before the hard subprocess kill backstop.
 - **Non-Blocking Async Events (`async: true`)**: Pass `"async": true` and `"event_type": "agy_camera_done"` (plus optional `"request_id"` / `"metadata"`) to receive an immediate `202 Accepted` response and trigger an automation on the resulting Home Assistant event (`trigger: event`, `event_type: agy_camera_done`).
 - **Session Auth Healthcheck (`GET /health`)**: Poll `http://68eea963-antigravity:8120/health` with a REST `binary_sensor` to alert if your Google OAuth session expires:
 

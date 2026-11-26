@@ -1,6 +1,6 @@
 # https://contributors.home-assistant.io/apps/reference/configuration/
 name: Google Antigravity (Gemini AI)
-version: "1.5.6"
+version: "1.5.7"
 slug: antigravity
 description: >-
   Google Antigravity autonomous AI agent CLI (agy) with persistent Remote
@@ -51,7 +51,7 @@ schema:
   workspace_dir: str
   api_enabled: bool
   api_port: port
-  default_model: list(gemini-4-hydrogen-low|gemini-4-argon-medium|gemini-4-argon-high|gemini-4-argon-low|gemini-4-hydrogen-high|gemini-4-hydrogen-xhigh|gemini-4-hydrogen-medium|gemini-pro-orchestrator-g1-pro|gemini-3.8-flash-high|gemini-3.8-flash-medium|gemini-3.8-flash-low|claude-opus-5-5-low|claude-opus-5-5-medium|claude-opus-5-5-high|claude-sonnet-5-5-low|claude-sonnet-5-5-medium|claude-sonnet-5-5-high|gpt-oss-120b-medium)
+  default_model: list(gemini-4-hydrogen-low|gemini-4-neon-high|gemini-4-neon-xhigh|gemini-4-neon-medium|gemini-4-neon-low|gemini-4-carbon-medium|gemini-4-carbon-high|gemini-4-carbon-low|gemini-4-argon-medium|gemini-4-argon-high|gemini-4-argon-low|gemini-4-hydrogen-high|gemini-4-hydrogen-xhigh|gemini-4-hydrogen-medium|gemini-pro-orchestrator-neon|gemini-pro-orchestrator|gemini-pro-orchestrator-argon|gemini-3.8-flash-high|gemini-3.8-flash-medium|gemini-3.8-flash-low|claude-opus-5-5-low|claude-opus-5-5-medium|claude-opus-5-5-high|claude-sonnet-5-5-low|claude-sonnet-5-5-medium|claude-sonnet-5-5-high|gpt-oss-120b-medium)
   default_timeout: int(10,600)
   default_ephemeral: bool
   ha_mcp_enabled: bool

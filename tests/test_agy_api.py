@@ -104,6 +104,15 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
             "prompt = args[args.index('-p') + 1] if '-p' in args else ''\n"
             "if 'SIMULATE_TIMEOUT' in prompt:\n"
             "    time.sleep(5)\n"
+            "if 'SIMULATE_PRINT_TIMEOUT' in prompt:\n"
+            "    import uuid\n"
+            "    cid = str(uuid.uuid4())\n"
+            "    base = pathlib.Path(os.environ['AGY_CLI_DATA_DIR'])\n"
+            "    (base / 'conversations').mkdir(parents=True, exist_ok=True)\n"
+            "    (base / 'conversations' / f'{cid}.db').write_text('data')\n"
+            "    print(json.dumps({'conversation_id': cid, 'status': 'error'}))\n"
+            "    sys.stderr.write('print-timeout deadline exceeded\\n')\n"
+            "    sys.exit(1)\n"
             "if 'SIMULATE_FAIL' in prompt:\n"
             "    sys.stderr.write('simulated agy cli failure\\n')\n"
             "    sys.exit(2)\n"
@@ -284,6 +293,9 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertIn("--dangerously-skip-permissions", inner["args"])
         self.assertIn("--output-format", inner["args"])
         self.assertIn("json", inner["args"])
+        self.assertIn("--print-timeout", inner["args"])
+        self.assertIn("180s", inner["args"])
+        self.assertIn("--disable-slash-commands", inner["args"])
         self.assertIn("--add-dir", inner["args"])
         self.assertIn(str(self.media_dir), inner["args"])
         self.assertIn("--conversation", inner["args"])
@@ -688,6 +700,35 @@ class TestAgyApiServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self._proto_ids("jetbox_summaries_proto.pb"), [live_cid])
         # Corrupt protobuf file is skipped without error or modification
         self.assertEqual(corrupt_pb.read_bytes(), corrupt_bytes)
+
+    async def test_disable_slash_commands_and_graceful_print_timeout_cleanup(self) -> None:
+        status, body = await self._request(
+            "POST",
+            "/api/generate",
+            {"prompt": "Allow skill call", "disable_slash_commands": False},
+        )
+        self.assertEqual(status, 200)
+        inner = json.loads(body["response"])
+        self.assertNotIn("--disable-slash-commands", inner["args"])
+        self.assertIn("--print-timeout", inner["args"])
+
+        status_bad, body_bad = await self._request(
+            "POST",
+            "/api/generate",
+            {"prompt": "Hello", "disable_slash_commands": "nope"},
+        )
+        self.assertEqual(status_bad, 400)
+        self.assertIn("Invalid 'disable_slash_commands'", body_bad["message"])
+
+        status_to, body_to = await self._request(
+            "POST",
+            "/api/generate",
+            {"prompt": "SIMULATE_PRINT_TIMEOUT", "timeout": 15},
+        )
+        self.assertEqual(status_to, 504)
+        self.assertIn("timed out after 15 seconds", body_to["message"])
+        conv_dir = self.cli_data_dir / "conversations"
+        self.assertEqual(list(conv_dir.iterdir()), [])
 
     async def test_semaphore_limits_concurrency_to_two(self) -> None:
         results = await asyncio.gather(
