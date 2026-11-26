@@ -1,6 +1,6 @@
 # https://contributors.home-assistant.io/apps/reference/configuration/
 name: Google Antigravity (Gemini AI)
-version: "1.5.7"
+version: "1.5.8"
 slug: antigravity
 description: >-
   Google Antigravity autonomous AI agent CLI (agy) with persistent Remote

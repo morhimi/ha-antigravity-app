@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.8
+
+- Updated `ghcr.io/home-assistant/base-debian:trixie` base image (`sha256:a7e1db1748f4`).
+
 ## 1.5.7
 
 - Synchronized `config.yaml`'s `default_model` dropdown (27 models) and `README.md` with `agy 1.5.18`, adding `gemini-4-neon-*`, `gemini-4-carbon-*`, and `gemini-pro-orchestrator-{neon,,argon}` while removing deprecated `gemini-pro-orchestrator-g1-pro`.
